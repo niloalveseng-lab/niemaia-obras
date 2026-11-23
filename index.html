@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -272,7 +273,7 @@ async function refItens(force) {
   return S.ref.itens;
 }
 async function refEquip(force) {
-  if (!S.ref.equip || force) S.ref.equip = await q(sb.from('equipamentos').select('id,prefixo,descricao,status,horimetro_atual').eq('obra_id', S.obra.id).order('prefixo'));
+  if (!S.ref.equip || force) S.ref.equip = await q(sb.from('equipamentos').select('id,prefixo,descricao,tipo,status,horimetro_atual').eq('obra_id', S.obra.id).order('prefixo'));
   return S.ref.equip;
 }
 async function refMat(force) {
@@ -1754,6 +1755,45 @@ function acharItem(ref, itens) {
   return itens.find(i => semAcento(i.codigo) === r) || itens.find(i => semAcento(i.item) === r) || itens.find(i => semAcento(i.descricao) === r)
     || itens.find(i => r.length > 5 && semAcento(i.descricao).includes(r)) || itens.find(i => i.codigo && r.startsWith(semAcento(i.codigo))) || null;
 }
+/* RDO em Word (modelo NIEMAIA) → mesma estrutura do JSON */
+async function lerDocxRdo(file) {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const xml = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
+  const relXml = zip.file('word/_rels/document.xml.rels') ? new DOMParser().parseFromString(await zip.file('word/_rels/document.xml.rels').async('string'), 'application/xml') : null;
+  const rel = {}; if (relXml) [...relXml.getElementsByTagName('Relationship')].forEach(r => rel[r.getAttribute('Id')] = r.getAttribute('Target'));
+  const ehTopo = el => { let x = el.parentNode; while (x) { if (x.localName === 'tbl') return false; x = x.parentNode; } return true; };
+  const txtP = pp => [...pp.getElementsByTagNameNS(W, '*')].map(n => n.localName === 't' ? n.textContent : (n.localName === 'tab' ? ' ' : (n.localName === 'br' ? ' | ' : ''))).join('');
+  const txtC = tc => [...tc.getElementsByTagNameNS(W, 'p')].map(txtP).map(s => s.trim()).filter(Boolean).join(' | ');
+  const tabelas = [...xml.getElementsByTagNameNS(W, 'tbl')].filter(ehTopo).map(t => [...t.childNodes].filter(n => n.localName === 'tr').map(tr => [...tr.childNodes].filter(n => n.localName === 'tc').map(tc => ({ t: txtC(tc), img: [...tc.getElementsByTagName('*')].filter(n => n.localName === 'blip').map(b => b.getAttributeNS(R, 'embed')).filter(Boolean) }))));
+  const sec = re => tabelas.find(t => t.length && re.test(semAcento(t[0].map(c => c.t).join(' '))));
+  const vazio = s => !s || /a preencher|^[—–-]+$/.test(semAcento(s));
+  const todo = tabelas.flat(2).map(c => c.t).join(' | ');
+  const r = { servicos: [], efetivo: [], equipamentos: [], _fotos: [], _doc: file, _av: [] };
+  const md = todo.match(/Data:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i); r.data = md ? normData(md[1]) : normData((file.name.match(/\d{4}-\d{2}-\d{2}/) || [])[0]);
+  const mn = todo.match(/RDO\s*N[ºo°.]*\s*:?\s*(\d+)/i); r.numero = mn ? mn[1] : null;
+  const mh = todo.match(/Hor[aá]rio:?\s*(\d{1,2}[:h]\d{2})\s*(?:às|as|a|-|–)\s*(\d{1,2}[:h]\d{2})/i); if (mh) { r.horario_inicio = mh[1].replace('h', ':'); r.horario_fim = mh[2].replace('h', ':'); }
+  const cab = semAcento((tabelas[0] || []).flat().map(c => c.t).join(' '));
+  r.obra = /polo/.test(cab) ? 'POLO' : /alca/.test(cab) ? 'ALCA' : /ruas|pavimentacao/.test(cab) ? 'RUAS' : null;
+  const cl = sec(/clima|condic/);
+  if (cl) { const cond = []; cl.forEach(l => { const p0 = semAcento(l[0] && l[0].t); if (/^manh/.test(p0)) { r.clima_manha = l[1] && l[1].t; cond.push(normCond(l[2] && l[2].t)); } if (/^tarde/.test(p0)) { r.clima_tarde = l[1] && l[1].t; cond.push(normCond(l[2] && l[2].t)); } });
+    r.condicao = cond.length && cond.every(c => c === 'impraticavel') ? 'impraticavel' : cond.some(c => c !== 'praticavel') ? 'parcial' : 'praticavel'; }
+  const ef = sec(/efetivo|mao de obra/);
+  if (ef) ef.slice(1).forEach(l => { const f = l[0] && l[0].t; if (!f || /^funcao|^total/.test(semAcento(f))) return; const qd = nOuNulo(l[1] && l[1].t); if (qd == null) { r._av.push(`Efetivo "${f}" sem quantidade`); return; } r.efetivo.push({ funcao: f, quantidade: qd, vinculo: l[2] ? l[2].t : 'proprio' }); });
+  const eq = sec(/equipamento/);
+  if (eq) eq.slice(1).forEach(l => { const n = l[0] && l[0].t; if (!n || /^equipamento$/.test(semAcento(n))) return; r.equipamentos.push({ _nome: n, _qtd: nOuNulo(l[1] && l[1].t) || 1, prefixo: vazio(l[2] && l[2].t) ? null : l[2].t, motivo_parada: l[3] && !vazio(l[3].t) ? l[3].t : null }); });
+  const sv = sec(/servico/);
+  if (sv) sv.slice(1).forEach(l => { const s = l[0] && l[0].t; if (!s || /^servico$/.test(semAcento(s))) return; const loc = (l[1] && l[1].t) || ''; const desc = (l[2] && l[2].t) || '';
+    const me = loc.match(/(\d+)\s*\+\s*([\d.,]+)?\s*(?:a|à|até|ate|–|-)\s*(\d+)\s*\+\s*([\d.,]+)?/i); const ml = loc.match(/\b(LE|LD)\b|lado\s+(esquerdo|direito)|\beixo\b|ambos/i);
+    r.servicos.push({ servico: s, local: loc.replace(/\s*[–-]?\s*est\.?.*$/i, '').trim() || loc || null, estaca_ini: me ? `${me[1]}+${me[2] || 0}` : null, estaca_fim: me ? `${me[3]}+${me[4] || 0}` : null, lado: ml ? ml[0] : null, quantidade: nOuNulo(l[3] && l[3].t), unidade: l[4] ? l[4].t : null, observacao: desc || null }); });
+  const oc = sec(/ocorrenc/); if (oc) r.ocorrencias = oc.slice(1).flat().map(c => c.t).filter(Boolean).join('\n').replace(/ \| /g, '\n');
+  r.atividades = r.servicos.map(s => `${s.servico}${s.local ? ' – ' + s.local : ''}${s.quantidade != null ? ': ' + nf(s.quantidade, s.quantidade % 1 ? 2 : 0) + ' ' + (s.unidade || '') : ''}${s.observacao ? ' (' + s.observacao + ')' : ''}`).join('\n') || null;
+  const ft = sec(/fotograf|foto/);
+  if (ft) for (const l of ft.slice(1)) for (const c of l) for (const id of c.img) { const alvo = rel[id]; if (!alvo) continue; const z = zip.file('word/' + alvo.replace(/^\//, '').replace(/^word\//, '')); if (!z) continue;
+    const mdh = c.t.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s*(\d{1,2}:\d{2})?/); let dh = null; if (mdh) { const d = normData(mdh[1]); dh = new Date(`${d}T${mdh[2] || '12:00'}:00-03:00`).toISOString(); }
+    r._fotos.push({ blob: await z.async('blob'), nome: alvo.split('/').pop(), legenda: c.t || null, data_hora: dh }); }
+  return r;
+}
 /* Excel modelo → mesma estrutura do JSON */
 function xlsxParaJson(wb) {
   const aba = n => { const k = wb.SheetNames.find(x => semAcento(x).startsWith(n)); return k ? XLSX.utils.sheet_to_json(wb.Sheets[k], { defval: null }) : []; };
@@ -1777,16 +1817,18 @@ function modeloXlsx() {
 }
 async function importarRdo(c) {
   if (!pode('campo')) { c.innerHTML = '<div class="vazio">Seu perfil não importa RDO.</div>'; return; }
-  c.innerHTML = `<div class="g2"><div class="card"><h3>1. Arquivo de importação</h3><p class="muted">Use o arquivo <b>.json</b> que o Claude entrega junto com cada RDO (vários dias no mesmo arquivo), ou o modelo Excel preenchido. Também dá para colar o texto do JSON abaixo.</p>
-  <input type="file" id="iArq" accept=".json,.xlsx,.xls,.txt"><textarea id="iTxt" placeholder='{"obra":"${S.obra.codigo}","rdos":[{"data":"2026-11-23", ...}]}' style="margin-top:10px;min-height:110px;font-family:monospace;font-size:12px"></textarea>
+  c.innerHTML = `<div class="g2"><div class="card"><h3>1. Arquivo de importação</h3><p class="muted">Escolha os <b>RDOs em Word (.docx)</b> no modelo NIEMAIA, um ou vários dias de uma vez. O sistema lê clima, efetivo, equipamentos, serviços, ocorrências e fotos, e anexa o próprio documento ao dia. Também aceita o .json ou o modelo Excel. Também dá para colar o texto do JSON abaixo.</p>
+  <input type="file" id="iArq" accept=".docx,.json,.xlsx,.xls,.txt" multiple><textarea id="iTxt" placeholder='{"obra":"${S.obra.codigo}","rdos":[{"data":"2026-11-23", ...}]}' style="margin-top:10px;min-height:110px;font-family:monospace;font-size:12px"></textarea>
   <div class="bar" style="margin-top:10px"><button id="iMod"><i class="ti ti-file-spreadsheet"></i>Baixar modelo Excel</button></div></div>
   <div class="card"><h3>2. Documentos do RDO (opcional)</h3><p class="muted">PDF ou Word gerados no Claude. O sistema anexa ao RDO do dia pela data no nome do arquivo (ex.: <code>RUAS_RDO_2026-11-23.pdf</code> ou <code>RDO 23-11-2026.docx</code>).</p><input type="file" id="iDocs" accept=".pdf,.docx,.doc" multiple>
   <h3>3. Opções</h3><div class="form"><div><label for="iSt">Situação ao importar</label><select id="iSt"><option value="rascunho">Rascunho</option><option value="enviado" selected>Enviar para aprovação</option></select></div><div><label for="iEx">Se já existir RDO no dia</label><select id="iEx"><option value="pular">Não mexer (pular)</option><option value="substituir">Substituir (se não aprovado)</option></select></div>
+  <div class="wf"><div class="chk"><input type="checkbox" id="iFot" checked><span>Importar as fotos do documento Word para o RDO (com a legenda e a data/hora do documento)</span></div></div>
   <div class="wf"><div class="chk"><input type="checkbox" id="iMem" checked><span>Lançar os serviços com item do orçamento na memória de cálculo (produção mensal)</span></div></div></div></div></div>
   <div class="bar"><span class="sp"></span><button class="pri" id="iAn"><i class="ti ti-search"></i>Analisar</button></div><div id="iPrev"></div>`;
   $('#iMod').onclick = modeloXlsx;
   let pacote = null, plano = [];
-  $('#iArq').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { if (/\.xlsx?$/i.test(f.name)) { pacote = xlsxParaJson(XLSX.read(await f.arrayBuffer(), { cellDates: false })); $('#iTxt').value = `Planilha ${f.name} carregada: ${pacote.rdos.length} dia(s) de RDO.`; } else { $('#iTxt').value = await f.text(); pacote = null; } toast(`Arquivo ${f.name} carregado. Clique em Analisar.`); } catch (x) { erro(x); } };
+  $('#iArq').onchange = async e => { const fs = [...e.target.files]; const f = fs[0]; if (!f) return; try {
+    if (fs.some(x => /\.docx$/i.test(x.name))) { const lidos = []; for (const x of fs.filter(x => /\.docx$/i.test(x.name))) { try { lidos.push(await lerDocxRdo(x)); } catch (y) { toast(`${x.name}: não foi possível ler (${y.message})`, 'erro'); } } const obras = [...new Set(lidos.map(x => x.obra).filter(Boolean))]; if (obras.length > 1) throw new Error('Os documentos são de obras diferentes: ' + obras.join(', ') + '. Importe uma obra por vez.'); pacote = { obra: obras[0] || null, rdos: lidos }; $('#iTxt').value = `${lidos.length} RDO(s) em Word carregado(s): ${lidos.map(x => (x.numero ? 'nº ' + x.numero + ' – ' : '') + dt(x.data)).join(', ')}.`; toast('Documentos lidos. Clique em Analisar.'); return; } if (/\.xlsx?$/i.test(f.name)) { pacote = xlsxParaJson(XLSX.read(await f.arrayBuffer(), { cellDates: false })); $('#iTxt').value = `Planilha ${f.name} carregada: ${pacote.rdos.length} dia(s) de RDO.`; } else { $('#iTxt').value = await f.text(); pacote = null; } toast(`Arquivo ${f.name} carregado. Clique em Analisar.`); } catch (x) { erro(x); } };
   $('#iAn').onclick = async () => { try {
     if (!pacote || $('#iTxt').value.trim().startsWith('{') || $('#iTxt').value.trim().startsWith('[')) { const t = $('#iTxt').value.trim(); if (!t) throw new Error('Escolha o arquivo ou cole o JSON.'); let j; try { j = JSON.parse(t.replace(/^```(json)?|```$/g, '')); } catch (x) { if (!pacote) throw new Error('JSON inválido: ' + x.message); j = pacote; } pacote = Array.isArray(j) ? { rdos: j } : (j.rdos ? j : { obra: j.obra, rdos: [j] }); }
     if (pacote.obra && semAcento(pacote.obra).replace(/[^a-z]/g, '') !== semAcento(S.obra.codigo).replace(/[^a-z]/g, '')) throw new Error(`O arquivo é da obra ${pacote.obra}, mas a obra selecionada é ${S.obra.codigo}. Troque a obra no topo.`);
@@ -1796,36 +1838,50 @@ async function importarRdo(c) {
     plano = pacote.rdos.map(r => {
       const data = normData(r.data); const av = []; const ex = data && exMap[data];
       if (!data) av.push('Data inválida');
-      const servicos = (r.servicos || []).map(s => { const it = acharItem(s.item || s.codigo || s.item_orcamento, itens); if ((s.item || s.codigo) && !it) av.push(`Item "${s.item || s.codigo}" não encontrado no orçamento (serviço entra sem item)`); const ul = s.unidade || (it && it.unidade) || null; return { orcamento_item_id: it ? it.id : null, servico: s.servico || (it && it.descricao) || 'Serviço', local: s.local || s.rua || null, estaca_ini: s.estaca_ini != null ? String(s.estaca_ini) : null, estaca_fim: s.estaca_fim != null ? String(s.estaca_fim) : null, lado: normLado(s.lado), comprimento: nOuNulo(s.comprimento), largura: nOuNulo(s.largura), quantidade: nOuNulo(s.quantidade), unidade: ul, retrabalho: !!s.retrabalho, observacao: s.observacao || null, _esp: nOuNulo(s.espessura) }; });
+      av.push(...(r._av || []));
+      const servicos = (r.servicos || []).map(s => { let it = acharItem(s.item || s.codigo || s.item_orcamento, itens); if ((s.item || s.codigo) && !it) av.push(`Item "${s.item || s.codigo}" não encontrado no orçamento (serviço entra sem item)`);
+        if (!it && !s.item && !s.codigo && s.servico) { const sv = semAcento(s.servico); it = itens.find(i => { const d = semAcento(i.descricao); return d.length > 6 && (sv.includes(d) || d.includes(sv)); }) || null; }
+        const un = x => semAcento(x).replace(/[^a-z0-9]/g, '').replace(/[23]$/, '');
+        const uOk = !it || !s.unidade || un(s.unidade) === un(it.unidade);
+        if (it && !uOk) av.push(`"${s.servico}" em ${s.unidade}: unidade diferente do item ${it.codigo || ''} (${it.unidade}) – não vai para a memória`);
+        if (!it && r._doc) av.push(`"${s.servico}" sem item do orçamento – entra só no RDO`);
+        const ul = s.unidade || (it && it.unidade) || null; return { orcamento_item_id: it ? it.id : null, servico: s.servico || (it && it.descricao) || 'Serviço', local: s.local || s.rua || null, estaca_ini: s.estaca_ini != null ? String(s.estaca_ini) : null, estaca_fim: s.estaca_fim != null ? String(s.estaca_fim) : null, lado: normLado(s.lado), comprimento: nOuNulo(s.comprimento), largura: nOuNulo(s.largura), quantidade: nOuNulo(s.quantidade), unidade: ul, retrabalho: !!s.retrabalho, observacao: s.observacao || null, _esp: nOuNulo(s.espessura), _semMem: !uOk }; });
       const efetivo = (r.efetivo || []).filter(x => x.funcao && nOuNulo(x.quantidade) != null).map(x => ({ funcao: String(x.funcao).trim(), vinculo: semAcento(x.vinculo).startsWith('terc') ? 'terceiro' : 'proprio', quantidade: Math.round(nOuNulo(x.quantidade)), horas: nOuNulo(x.horas) ?? 8 }));
-      const equips = []; (r.equipamentos || []).forEach(x => { const e = eqMap[semAcento(x.prefixo)]; if (!e) { av.push(`Prefixo "${x.prefixo}" não cadastrado (linha ignorada)`); return; } const hi = nOuNulo(x.horimetro_ini), hf = nOuNulo(x.horimetro_fim); equips.push({ equipamento_id: e.id, horimetro_ini: hi, horimetro_fim: hf, horas_produtivas: nOuNulo(x.horas_produtivas) ?? (hi != null && hf != null ? Math.round((hf - hi) * 10) / 10 : 0), horas_improdutivas: nOuNulo(x.horas_improdutivas) ?? 0, horas_paradas: nOuNulo(x.horas_paradas) ?? 0, motivo_parada: x.motivo_parada || null, diesel_litros: nOuNulo(x.diesel_litros) }); });
-      const doc = data ? docs.find(f => { const n = f.name; return n.includes(data) || n.includes(data.split('-').reverse().join('-')) || n.includes(data.split('-').reverse().join('.')) || n.includes(data.split('-').reverse().join('_')); }) : null;
+      const equips = []; const usados = new Set();
+      (r.equipamentos || []).forEach(x => { if (!x.prefixo && x._nome) { const pal = semAcento(x._nome).replace(/\(.*?\)/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 2 && !['com', 'de', 'para', 'terceirizado', 'proprio'].includes(w)); const pont = e => { const d = semAcento(e.descricao + ' ' + (e.tipo || '')); return pal.filter(w => d.includes(w)).length / Math.max(pal.length, 1); }; const cand = eqs.filter(e => !usados.has(e.id) && pont(e) >= 0.5).sort((a, b) => pont(b) - pont(a)).slice(0, x._qtd || 1); if (!cand.length) { av.push(`Equipamento "${x._nome}" sem prefixo e sem cadastro equivalente (ignorado)`); return; } if (cand.length < (x._qtd || 1)) av.push(`"${x._nome}": ${x._qtd} no RDO, ${cand.length} cadastrado(s)`); cand.forEach(e => { usados.add(e.id); equips.push({ equipamento_id: e.id, horimetro_ini: null, horimetro_fim: null, horas_produtivas: null, horas_improdutivas: null, horas_paradas: null, motivo_parada: x.motivo_parada || null, diesel_litros: null }); }); return; }
+        const e = eqMap[semAcento(x.prefixo)]; if (!e) { av.push(`Prefixo "${x.prefixo}" não cadastrado (linha ignorada)`); return; } usados.add(e.id); const hi = nOuNulo(x.horimetro_ini), hf = nOuNulo(x.horimetro_fim); equips.push({ equipamento_id: e.id, horimetro_ini: hi, horimetro_fim: hf, horas_produtivas: nOuNulo(x.horas_produtivas) ?? (hi != null && hf != null ? Math.round((hf - hi) * 10) / 10 : 0), horas_improdutivas: nOuNulo(x.horas_improdutivas) ?? 0, horas_paradas: nOuNulo(x.horas_paradas) ?? 0, motivo_parada: x.motivo_parada || null, diesel_litros: nOuNulo(x.diesel_litros) }); });
+      const doc = r._doc || (data ? docs.find(f => { const n = f.name; return n.includes(data) || n.includes(data.split('-').reverse().join('-')) || n.includes(data.split('-').reverse().join('.')) || n.includes(data.split('-').reverse().join('_')); }) : null);
       let acao = 'criar'; if (ex) acao = $('#iEx').value === 'substituir' ? (ex.status === 'aprovado' && !pode('aprovar') ? 'bloqueado' : 'substituir') : 'pular';
-      return { data, ex, acao, av, doc, rdo: { obra_id: S.obra.id, data, clima_manha: normClima(r.clima_manha || r.clima), clima_tarde: normClima(r.clima_tarde || r.clima), condicao: normCond(r.condicao), horario_inicio: hora(r.horario_inicio) , horario_fim: hora(r.horario_fim), atividades: r.atividades || null, ocorrencias: r.ocorrencias || null, observacoes_fiscal: r.observacoes_fiscal || null, origem: 'importado' }, servicos, efetivo, equips };
+      return { data, ex, acao, av, doc, fotos: r._fotos || [], numero: r.numero, rdo: { obra_id: S.obra.id, data, clima_manha: normClima(r.clima_manha || r.clima), clima_tarde: normClima(r.clima_tarde || r.clima), condicao: normCond(r.condicao), horario_inicio: hora(r.horario_inicio) , horario_fim: hora(r.horario_fim), atividades: r.atividades || null, ocorrencias: r.ocorrencias || null, observacoes_fiscal: r.observacoes_fiscal || null, origem: 'importado' }, servicos, efetivo, equips };
     }).sort((a, b) => a.data < b.data ? -1 : 1);
     const AC = { criar: '<span class="badge b-ok">Criar</span>', substituir: '<span class="badge b-av">Substituir</span>', pular: '<span class="badge">Pular (já existe)</span>', bloqueado: '<span class="badge b-er">Aprovado – só o gestor</span>' };
-    $('#iPrev').innerHTML = `<div class="card"><h3>Prévia: ${plano.length} RDO(s)</h3><div class="tw"><table class="grid"><thead><tr><th>Data</th><th>Ação</th><th>Clima</th><th>Condição</th><th class="n">Serviços</th><th class="n">Efetivo</th><th class="n">Equip.</th><th>Documento</th><th>Avisos</th></tr></thead><tbody>${plano.map(p => `<tr><td>${dt(p.data) || '–'}</td><td>${AC[p.acao]}</td><td>${h(L.clima[p.rdo.clima_manha] || '–')} / ${h(L.clima[p.rdo.clima_tarde] || '–')}</td><td>${h(L.condicao[p.rdo.condicao])}</td><td class="n">${p.servicos.length}</td><td class="n">${soma(p.efetivo, x => x.quantidade)}</td><td class="n">${p.equips.length}</td><td>${p.doc ? h(p.doc.name) : '<span class="muted">–</span>'}</td><td style="font-size:12.5px;color:var(--av)">${p.av.map(h).join('<br>')}</td></tr>`).join('')}</tbody></table></div>
+    $('#iPrev').innerHTML = `<div class="card"><h3>Prévia: ${plano.length} RDO(s)</h3><div class="tw"><table class="grid"><thead><tr><th>Data</th><th>Ação</th><th>Clima</th><th>Condição</th><th class="n">Serviços</th><th class="n">Efetivo</th><th class="n">Equip.</th><th class="n">Fotos</th><th>Documento</th><th>Avisos</th></tr></thead><tbody>${plano.map(p => `<tr><td>${dt(p.data) || '–'}</td><td>${AC[p.acao]}</td><td>${h(L.clima[p.rdo.clima_manha] || '–')} / ${h(L.clima[p.rdo.clima_tarde] || '–')}</td><td>${h(L.condicao[p.rdo.condicao])}</td><td class="n">${p.servicos.length}</td><td class="n">${soma(p.efetivo, x => x.quantidade)}</td><td class="n">${p.equips.length}</td><td class="n">${p.fotos.length}</td><td>${p.doc ? h(p.doc.name) : '<span class="muted">–</span>'}</td><td style="font-size:12.5px;color:var(--av)">${p.av.map(h).join('<br>')}</td></tr>`).join('')}</tbody></table></div>
     <div class="bar" style="margin-top:12px"><span class="sp"></span><button class="pri" id="iGo"><i class="ti ti-upload"></i>Importar ${plano.filter(p => ['criar', 'substituir'].includes(p.acao) && p.data).length} RDO(s)</button></div></div>`;
     $('#iGo').onclick = executar;
   } catch (x) { erro(x); } };
   const executar = async () => {
-    const bt = $('#iGo'); bt.disabled = true; let ok = 0, mem = 0, falhas = [];
+    const bt = $('#iGo'); bt.disabled = true; let ok = 0, mem = 0, nf_ = 0, falhas = [];
     const its = Object.fromEntries((await refItens()).map(i => [i.id, i]));
     for (const p of plano.filter(p => ['criar', 'substituir'].includes(p.acao) && p.data)) {
       try {
-        const payload = { obra_codigo: S.obra.codigo, rdo: { ...p.rdo, id: p.ex ? p.ex.id : undefined, status: $('#iSt').value }, servicos: p.servicos.map(({ _esp, ...s }) => s), efetivo: p.efetivo, equips: p.equips };
+        const payload = { obra_codigo: S.obra.codigo, rdo: { ...p.rdo, id: p.ex ? p.ex.id : undefined, status: $('#iSt').value }, servicos: p.servicos.map(({ _esp, _semMem, ...s }) => s), efetivo: p.efetivo, equips: p.equips };
         if (payload.rdo.status === 'enviado' && p.ex && p.ex.status === 'aprovado') payload.rdo.status = 'aprovado';
         const id = await salvarRdoPayload(payload);
         if ($('#iMem').checked) {
           await q(sb.from('memoria_calculo').delete().eq('rdo_id', id));
-          const linhas = p.servicos.filter(s => s.orcamento_item_id && s.quantidade).map(s => { const [ii, fi] = parseEst(s.estaca_ini), [ie, fe] = parseEst(s.estaca_fim); const l = { est_ini_int: ii, est_ini_frac: fi, est_fim_int: ie, est_fim_frac: fe, lado: s.lado, comprimento: s.comprimento, largura: s.largura, espessura: s._esp, quantidade: s.quantidade }; return { obra_id: S.obra.id, data: p.data, rdo_id: id, orcamento_item_id: s.orcamento_item_id, local: s.local, ...l, observacao: s.observacao, formula: calcMemoria(l, its[s.orcamento_item_id]).formula || `${nf(s.quantidade)} ${s.unidade || ''}` }; });
+          const linhas = p.servicos.filter(s => s.orcamento_item_id && s.quantidade && !s._semMem).map(s => { const [ii, fi] = parseEst(s.estaca_ini), [ie, fe] = parseEst(s.estaca_fim); const l = { est_ini_int: ii, est_ini_frac: fi, est_fim_int: ie, est_fim_frac: fe, lado: s.lado, comprimento: s.comprimento, largura: s.largura, espessura: s._esp, quantidade: s.quantidade }; return { obra_id: S.obra.id, data: p.data, rdo_id: id, orcamento_item_id: s.orcamento_item_id, local: s.local, ...l, observacao: s.observacao, formula: calcMemoria(l, its[s.orcamento_item_id]).formula || `${nf(s.quantidade)} ${s.unidade || ''}` }; });
           if (linhas.length) { await q(sb.from('memoria_calculo').insert(linhas)); mem += linhas.length; }
         }
         if (p.doc) { const ext = p.doc.name.split('.').pop().toLowerCase(); const cam = `${S.obra.id}/rdo/${p.data}_${Date.now()}.${ext}`; await q(sb.storage.from('documentos').upload(cam, p.doc, { upsert: true, contentType: p.doc.type || undefined })); await q(sb.from('rdo').update({ anexo_caminho: cam, anexo_nome: p.doc.name }).eq('id', id)); }
+        if ($('#iFot').checked && p.fotos.length) {
+          const jaTem = await q(sb.from('fotos').select('legenda').eq('rdo_id', id)); const leg = new Set(jaTem.map(f => f.legenda));
+          for (const [k, f] of p.fotos.entries()) { if (f.legenda && leg.has(f.legenda)) continue; const u = await new Promise(ok2 => { const rd = new FileReader(); rd.onload = () => ok2(rd.result); rd.readAsDataURL(f.blob); }); const im = await reduzImg(u, 1920); const blob = im ? await (await fetch(im.url)).blob() : f.blob; const cam = `${S.obra.id}/${id}/${Date.now()}_${k}.jpg`;
+            await q(sb.storage.from('fotos').upload(cam, blob, { contentType: 'image/jpeg' })); await q(sb.from('fotos').insert({ obra_id: S.obra.id, rdo_id: id, caminho: cam, legenda: f.legenda, data_hora: f.data_hora || new Date(p.data + 'T12:00:00-03:00').toISOString() })); nf_++; }
+        }
         ok++;
       } catch (x) { falhas.push(`${dt(p.data)}: ${x.message}`); }
     }
-    $('#iPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:${falhas.length ? '#F1C4BE' : '#BFE3CF'}"><h3>${ok} RDO(s) importado(s)${mem ? ` · ${mem} linha(s) na memória de cálculo` : ''}</h3>${falhas.length ? `<p style="color:var(--er)">${falhas.map(h).join('<br>')}</p>` : '<p class="muted">Confira em Diários e, se for o caso, aprove.</p>'}</div>`);
+    $('#iPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:${falhas.length ? '#F1C4BE' : '#BFE3CF'}"><h3>${ok} RDO(s) importado(s)${mem ? ` · ${mem} linha(s) na memória de cálculo` : ''}${nf_ ? ` · ${nf_} foto(s)` : ''}</h3>${falhas.length ? `<p style="color:var(--er)">${falhas.map(h).join('<br>')}</p>` : '<p class="muted">Confira em Diários e, se for o caso, aprove.</p>'}</div>`);
     toast(`${ok} RDO(s) importado(s)`, falhas.length ? 'erro' : 'ok');
   };
 }
