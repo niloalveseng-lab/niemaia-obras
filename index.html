@@ -918,11 +918,13 @@ function grade(box, defs, dados, ro, onCh) {
 
 /* ================= RDO ================= */
 async function pgRdo(el) {
-  const [ano, mes] = hoje().split('-');
+  abas(el, [{ t: 'Diários', f: c => listaRdo(c) }, { t: 'Importar RDO (Claude / Excel)', f: c => importarRdo(c) }]);
+}
+async function listaRdo(el) {
   await crud(el, {
     table: 'rdo', title: 'Diários de obra (RDO)', doc: 'RDO_LISTA', order: 'data', asc: false, write: 'campo', novo: 'Novo RDO',
     intro: 'Um RDO por obra e por dia. Rascunho → enviado → aprovado pelo engenheiro gestor. RDO aprovado fica bloqueado.',
-    cols: [{ k: 'data', l: 'Data', t: 'date' }, { k: 'condicao', l: 'Condição', t: 'sel', o: L.condicao }, { k: 'clima_manha', l: 'Clima manhã', t: 'sel', o: L.clima }, { k: 'clima_tarde', l: 'Clima tarde', t: 'sel', o: L.clima }, { k: 'status', l: 'Situação', t: 'sel', o: L.status_rdo, badge: true }, { k: 'ocorrencias', l: 'Ocorrências', v: r => (r.ocorrencias || '').slice(0, 80) }],
+    cols: [{ k: 'data', l: 'Data', t: 'date' }, { k: 'condicao', l: 'Condição', t: 'sel', o: L.condicao }, { k: 'clima_manha', l: 'Clima manhã', t: 'sel', o: L.clima }, { k: 'clima_tarde', l: 'Clima tarde', t: 'sel', o: L.clima }, { k: 'status', l: 'Situação', t: 'sel', o: L.status_rdo, badge: true }, { k: 'origem', l: 'Origem', v: r => r.origem === 'importado' ? 'Importado' : 'Lançado' }, { k: 'anexo_nome', l: 'Documento', v: r => r.anexo_nome ? 'Sim' : '' }, { k: 'ocorrencias', l: 'Ocorrências', v: r => (r.ocorrencias || '').slice(0, 80) }],
     abrir: (r) => rdoEditor(r ? r.id : null)
   });
 }
@@ -953,6 +955,7 @@ async function rdoEditor(id, dataNova) {
   <div class="card"><h3 style="margin-top:0">Serviços executados</h3><p class="muted">Quantidade calculada automaticamente (comprimento × largura) para itens em m². A produção oficial é a memória de cálculo: use o botão "Lançar serviços na memória de cálculo" ou lance direto em Produção mensal. CBUQ: lance em Produção CBUQ, com o ticket da balança.</p><div id="gS"></div></div>
   <div class="g2"><div class="card"><h3 style="margin-top:0">Efetivo</h3><div id="gE"></div><p class="muted" id="totE"></p></div>
   <div class="card"><h3 style="margin-top:0">Equipamentos</h3><div id="gQ"></div></div></div>
+  ${id ? '<div class="card"><h3 style="margin-top:0">Documento do RDO (PDF / Word)</h3><div id="rdoAnexo" class="bar" style="margin:0"></div></div>' : ''}
   <div class="card"><h3 style="margin-top:0">Fotos</h3>${id ? `${ro ? '' : '<input type="file" id="fFoto" accept="image/*" multiple capture="environment" style="max-width:360px">'}<p class="muted">Legenda no padrão: [Obra] – [Serviço] – [Rua/Est.] – L[E/D]. Clique na foto para editar a legenda.</p><div class="fotos" id="lFotos"></div>` : '<p class="muted">Salve o RDO para anexar fotos.</p>'}</div>
   <div class="bar" id="acoes"></div>`;
   if (ro) $$('#cab input,#cab select,#cab textarea').forEach(e => e.disabled = true);
@@ -1026,7 +1029,7 @@ async function rdoEditor(id, dataNova) {
   if (id) b('PDF do RDO', '', async () => { const P = pdfNovo(`Relatório Diário de Obra – ${dt(r.data)}`); rdoPdf(P, D); if (D.fotos.length) await fotosPdf(P, D.fotos); P.salvar(`RDO_${r.data}`); });
   if (id && pode('aprovar') && (r.status !== 'aprovado' || S.perfil === 'admin')) b('Excluir RDO', 'er', () => confirma(`Excluir o RDO de ${dt(r.data)} com todos os lançamentos?`, async () => { await q(sb.from('rdo').delete().eq('id', id)); toast('RDO excluído'); location.hash = '#rdo'; rotear(); }));
   $('#voltar').onclick = () => rotear();
-  if (id) await fotosRdo(id, D, ro, gS);
+  if (id) { anexoRdo(id, r, ro); await fotosRdo(id, D, ro, gS); }
 }
 async function fotosRdo(id, D, ro, gS) {
   const box = $('#lFotos'); if (!box) return;
@@ -1727,6 +1730,112 @@ async function abastecimentoDia(c) {
     P.tabela(head, t.map(r => r.map((v, i) => i === 3 || i === 4 ? nf(v, 1) : i === 6 ? nf(v, 1) : (vc && (i === 7 || i === 8)) ? (i === 7 ? nf(v, 3) : brl(v)) : (v ?? ''))), { foot: ['Total', '', '', '', '', '', nf(soma(t, r => r[6]), 1), ...(vc ? ['', brl(soma(t, r => r[8]))] : []), '', '', ''], fs: 8.5 });
     P.assinaturas(['Frentista / responsável pelo abastecimento', 'Encarregado da obra', 'Almoxarife / apoio']); P.salvar(`ABASTECIMENTO_${DIA_ABAST}`); };
   await carregar();
+}
+
+'use strict';
+/* ================= IMPORTAÇÃO DE RDO (gerado no Claude) ================= */
+const semAcento = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function normClima(v) { const s = semAcento(v); if (!s) return null; if (/forte|intensa|torrencial/.test(s)) return 'chuva_forte'; if (/chuv|garoa|leve|fraca/.test(s)) return 'chuva_fraca'; if (/nubl|encob/.test(s)) return 'nublado'; if (/bom|sol|limpo|ensol/.test(s)) return 'bom'; return null; }
+function normCond(v) { const s = semAcento(v); if (!s) return 'praticavel'; if (/impra|inopera|paralis|nao trab/.test(s)) return 'impraticavel'; if (/parc/.test(s)) return 'parcial'; return 'praticavel'; }
+function normLado(v) { const s = semAcento(v).toUpperCase().replace(/[^A-Z]/g, ''); if (!s) return null; if (s === 'LE' || s === 'E' || s.startsWith('ESQ')) return 'LE'; if (s === 'LD' || s === 'D' || s.startsWith('DIR')) return 'LD'; if (s.startsWith('EIX')) return 'EIXO'; if (s.startsWith('AMB') || s === 'LELD') return 'AMBOS'; return null; }
+function normData(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 864e5)); return d.toISOString().slice(0, 10); }
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  const s = String(v).trim(); let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/); if (m) return `${m[3].length === 2 ? '20' + m[3] : m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+const nOuNulo = v => { if (v == null || v === '') return null; if (typeof v === 'number') return v; const x = Number(String(v).replace(/\./g, '').replace(',', '.')); return isNaN(x) ? null : x; };
+const hora = v => { if (v == null || v === '') return null; if (typeof v === 'number') { const m = Math.round(v * 1440); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; } const m = String(v).match(/(\d{1,2})[:h](\d{2})?/); return m ? `${m[1].padStart(2, '0')}:${m[2] || '00'}` : null; };
+function acharItem(ref, itens) {
+  if (!ref) return null; const r = semAcento(ref);
+  return itens.find(i => semAcento(i.codigo) === r) || itens.find(i => semAcento(i.item) === r) || itens.find(i => semAcento(i.descricao) === r)
+    || itens.find(i => r.length > 5 && semAcento(i.descricao).includes(r)) || itens.find(i => i.codigo && r.startsWith(semAcento(i.codigo))) || null;
+}
+/* Excel modelo → mesma estrutura do JSON */
+function xlsxParaJson(wb) {
+  const aba = n => { const k = wb.SheetNames.find(x => semAcento(x).startsWith(n)); return k ? XLSX.utils.sheet_to_json(wb.Sheets[k], { defval: null }) : []; };
+  const low = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [semAcento(k).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''), v]));
+  const rdos = {}; const pega = d => (rdos[d] = rdos[d] || { data: d, servicos: [], efetivo: [], equipamentos: [] });
+  aba('rdo').map(low).forEach(r => { const d = normData(r.data); if (d) Object.assign(pega(d), r, { data: d }); });
+  aba('serv').map(low).forEach(r => { const d = normData(r.data); if (d) pega(d).servicos.push(r); });
+  aba('efet').map(low).forEach(r => { const d = normData(r.data); if (d) pega(d).efetivo.push(r); });
+  aba('equip').map(low).forEach(r => { const d = normData(r.data); if (d) pega(d).equipamentos.push(r); });
+  const o = aba('rdo').map(low)[0] || {};
+  return { obra: o.obra || null, rdos: Object.values(rdos) };
+}
+function modeloXlsx() {
+  const wb = XLSX.utils.book_new();
+  const ap = (n, aoa) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), n);
+  ap('RDO', [['obra', 'data', 'clima_manha', 'clima_tarde', 'condicao', 'horario_inicio', 'horario_fim', 'atividades', 'ocorrencias', 'observacoes_fiscal'], [S.obra.codigo, '23/11/2026', 'bom', 'nublado', 'praticavel', '07:00', '17:00', 'Resumo das atividades do dia', 'Ocorrências do dia', '']]);
+  ap('SERVICOS', [['data', 'item', 'servico', 'local', 'estaca_ini', 'estaca_fim', 'lado', 'comprimento', 'largura', 'espessura', 'quantidade', 'unidade', 'observacao'], ['23/11/2026', '04.910.03', 'Meio-fio MFC-03', 'Rua exemplo', '5+10', '12+0', 'LE', 130, '', '', 130, 'm', '']]);
+  ap('EFETIVO', [['data', 'funcao', 'vinculo', 'quantidade', 'horas'], ['23/11/2026', 'Servente', 'proprio', 8, 8]]);
+  ap('EQUIPAMENTOS', [['data', 'prefixo', 'horimetro_ini', 'horimetro_fim', 'horas_produtivas', 'horas_improdutivas', 'horas_paradas', 'motivo_parada', 'diesel_litros'], ['23/11/2026', 'RP-01', 1200, 1208, 8, 0, 0, '', '']]);
+  XLSX.writeFile(wb, `${S.obra.codigo}_MODELO_IMPORTACAO_RDO.xlsx`);
+}
+async function importarRdo(c) {
+  if (!pode('campo')) { c.innerHTML = '<div class="vazio">Seu perfil não importa RDO.</div>'; return; }
+  c.innerHTML = `<div class="g2"><div class="card"><h3>1. Arquivo de importação</h3><p class="muted">Use o arquivo <b>.json</b> que o Claude entrega junto com cada RDO (vários dias no mesmo arquivo), ou o modelo Excel preenchido. Também dá para colar o texto do JSON abaixo.</p>
+  <input type="file" id="iArq" accept=".json,.xlsx,.xls,.txt"><textarea id="iTxt" placeholder='{"obra":"${S.obra.codigo}","rdos":[{"data":"2026-11-23", ...}]}' style="margin-top:10px;min-height:110px;font-family:monospace;font-size:12px"></textarea>
+  <div class="bar" style="margin-top:10px"><button id="iMod"><i class="ti ti-file-spreadsheet"></i>Baixar modelo Excel</button></div></div>
+  <div class="card"><h3>2. Documentos do RDO (opcional)</h3><p class="muted">PDF ou Word gerados no Claude. O sistema anexa ao RDO do dia pela data no nome do arquivo (ex.: <code>RUAS_RDO_2026-11-23.pdf</code> ou <code>RDO 23-11-2026.docx</code>).</p><input type="file" id="iDocs" accept=".pdf,.docx,.doc" multiple>
+  <h3>3. Opções</h3><div class="form"><div><label for="iSt">Situação ao importar</label><select id="iSt"><option value="rascunho">Rascunho</option><option value="enviado" selected>Enviar para aprovação</option></select></div><div><label for="iEx">Se já existir RDO no dia</label><select id="iEx"><option value="pular">Não mexer (pular)</option><option value="substituir">Substituir (se não aprovado)</option></select></div>
+  <div class="wf"><div class="chk"><input type="checkbox" id="iMem" checked><span>Lançar os serviços com item do orçamento na memória de cálculo (produção mensal)</span></div></div></div></div></div>
+  <div class="bar"><span class="sp"></span><button class="pri" id="iAn"><i class="ti ti-search"></i>Analisar</button></div><div id="iPrev"></div>`;
+  $('#iMod').onclick = modeloXlsx;
+  let pacote = null, plano = [];
+  $('#iArq').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { if (/\.xlsx?$/i.test(f.name)) { pacote = xlsxParaJson(XLSX.read(await f.arrayBuffer(), { cellDates: false })); $('#iTxt').value = `Planilha ${f.name} carregada: ${pacote.rdos.length} dia(s) de RDO.`; } else { $('#iTxt').value = await f.text(); pacote = null; } toast(`Arquivo ${f.name} carregado. Clique em Analisar.`); } catch (x) { erro(x); } };
+  $('#iAn').onclick = async () => { try {
+    if (!pacote || $('#iTxt').value.trim().startsWith('{') || $('#iTxt').value.trim().startsWith('[')) { const t = $('#iTxt').value.trim(); if (!t) throw new Error('Escolha o arquivo ou cole o JSON.'); let j; try { j = JSON.parse(t.replace(/^```(json)?|```$/g, '')); } catch (x) { if (!pacote) throw new Error('JSON inválido: ' + x.message); j = pacote; } pacote = Array.isArray(j) ? { rdos: j } : (j.rdos ? j : { obra: j.obra, rdos: [j] }); }
+    if (pacote.obra && semAcento(pacote.obra).replace(/[^a-z]/g, '') !== semAcento(S.obra.codigo).replace(/[^a-z]/g, '')) throw new Error(`O arquivo é da obra ${pacote.obra}, mas a obra selecionada é ${S.obra.codigo}. Troque a obra no topo.`);
+    const [itens, eqs, exist] = await Promise.all([refItens(true), refEquip(true), q(sb.from('rdo').select('id,data,status').eq('obra_id', S.obra.id))]);
+    const exMap = Object.fromEntries(exist.map(r => [r.data, r])); const eqMap = Object.fromEntries(eqs.map(e => [semAcento(e.prefixo), e]));
+    const docs = [...$('#iDocs').files];
+    plano = pacote.rdos.map(r => {
+      const data = normData(r.data); const av = []; const ex = data && exMap[data];
+      if (!data) av.push('Data inválida');
+      const servicos = (r.servicos || []).map(s => { const it = acharItem(s.item || s.codigo || s.item_orcamento, itens); if ((s.item || s.codigo) && !it) av.push(`Item "${s.item || s.codigo}" não encontrado no orçamento (serviço entra sem item)`); const ul = s.unidade || (it && it.unidade) || null; return { orcamento_item_id: it ? it.id : null, servico: s.servico || (it && it.descricao) || 'Serviço', local: s.local || s.rua || null, estaca_ini: s.estaca_ini != null ? String(s.estaca_ini) : null, estaca_fim: s.estaca_fim != null ? String(s.estaca_fim) : null, lado: normLado(s.lado), comprimento: nOuNulo(s.comprimento), largura: nOuNulo(s.largura), quantidade: nOuNulo(s.quantidade), unidade: ul, retrabalho: !!s.retrabalho, observacao: s.observacao || null, _esp: nOuNulo(s.espessura) }; });
+      const efetivo = (r.efetivo || []).filter(x => x.funcao && nOuNulo(x.quantidade) != null).map(x => ({ funcao: String(x.funcao).trim(), vinculo: semAcento(x.vinculo).startsWith('terc') ? 'terceiro' : 'proprio', quantidade: Math.round(nOuNulo(x.quantidade)), horas: nOuNulo(x.horas) ?? 8 }));
+      const equips = []; (r.equipamentos || []).forEach(x => { const e = eqMap[semAcento(x.prefixo)]; if (!e) { av.push(`Prefixo "${x.prefixo}" não cadastrado (linha ignorada)`); return; } const hi = nOuNulo(x.horimetro_ini), hf = nOuNulo(x.horimetro_fim); equips.push({ equipamento_id: e.id, horimetro_ini: hi, horimetro_fim: hf, horas_produtivas: nOuNulo(x.horas_produtivas) ?? (hi != null && hf != null ? Math.round((hf - hi) * 10) / 10 : 0), horas_improdutivas: nOuNulo(x.horas_improdutivas) ?? 0, horas_paradas: nOuNulo(x.horas_paradas) ?? 0, motivo_parada: x.motivo_parada || null, diesel_litros: nOuNulo(x.diesel_litros) }); });
+      const doc = data ? docs.find(f => { const n = f.name; return n.includes(data) || n.includes(data.split('-').reverse().join('-')) || n.includes(data.split('-').reverse().join('.')) || n.includes(data.split('-').reverse().join('_')); }) : null;
+      let acao = 'criar'; if (ex) acao = $('#iEx').value === 'substituir' ? (ex.status === 'aprovado' && !pode('aprovar') ? 'bloqueado' : 'substituir') : 'pular';
+      return { data, ex, acao, av, doc, rdo: { obra_id: S.obra.id, data, clima_manha: normClima(r.clima_manha || r.clima), clima_tarde: normClima(r.clima_tarde || r.clima), condicao: normCond(r.condicao), horario_inicio: hora(r.horario_inicio) , horario_fim: hora(r.horario_fim), atividades: r.atividades || null, ocorrencias: r.ocorrencias || null, observacoes_fiscal: r.observacoes_fiscal || null, origem: 'importado' }, servicos, efetivo, equips };
+    }).sort((a, b) => a.data < b.data ? -1 : 1);
+    const AC = { criar: '<span class="badge b-ok">Criar</span>', substituir: '<span class="badge b-av">Substituir</span>', pular: '<span class="badge">Pular (já existe)</span>', bloqueado: '<span class="badge b-er">Aprovado – só o gestor</span>' };
+    $('#iPrev').innerHTML = `<div class="card"><h3>Prévia: ${plano.length} RDO(s)</h3><div class="tw"><table class="grid"><thead><tr><th>Data</th><th>Ação</th><th>Clima</th><th>Condição</th><th class="n">Serviços</th><th class="n">Efetivo</th><th class="n">Equip.</th><th>Documento</th><th>Avisos</th></tr></thead><tbody>${plano.map(p => `<tr><td>${dt(p.data) || '–'}</td><td>${AC[p.acao]}</td><td>${h(L.clima[p.rdo.clima_manha] || '–')} / ${h(L.clima[p.rdo.clima_tarde] || '–')}</td><td>${h(L.condicao[p.rdo.condicao])}</td><td class="n">${p.servicos.length}</td><td class="n">${soma(p.efetivo, x => x.quantidade)}</td><td class="n">${p.equips.length}</td><td>${p.doc ? h(p.doc.name) : '<span class="muted">–</span>'}</td><td style="font-size:12.5px;color:var(--av)">${p.av.map(h).join('<br>')}</td></tr>`).join('')}</tbody></table></div>
+    <div class="bar" style="margin-top:12px"><span class="sp"></span><button class="pri" id="iGo"><i class="ti ti-upload"></i>Importar ${plano.filter(p => ['criar', 'substituir'].includes(p.acao) && p.data).length} RDO(s)</button></div></div>`;
+    $('#iGo').onclick = executar;
+  } catch (x) { erro(x); } };
+  const executar = async () => {
+    const bt = $('#iGo'); bt.disabled = true; let ok = 0, mem = 0, falhas = [];
+    const its = Object.fromEntries((await refItens()).map(i => [i.id, i]));
+    for (const p of plano.filter(p => ['criar', 'substituir'].includes(p.acao) && p.data)) {
+      try {
+        const payload = { obra_codigo: S.obra.codigo, rdo: { ...p.rdo, id: p.ex ? p.ex.id : undefined, status: $('#iSt').value }, servicos: p.servicos.map(({ _esp, ...s }) => s), efetivo: p.efetivo, equips: p.equips };
+        if (payload.rdo.status === 'enviado' && p.ex && p.ex.status === 'aprovado') payload.rdo.status = 'aprovado';
+        const id = await salvarRdoPayload(payload);
+        if ($('#iMem').checked) {
+          await q(sb.from('memoria_calculo').delete().eq('rdo_id', id));
+          const linhas = p.servicos.filter(s => s.orcamento_item_id && s.quantidade).map(s => { const [ii, fi] = parseEst(s.estaca_ini), [ie, fe] = parseEst(s.estaca_fim); const l = { est_ini_int: ii, est_ini_frac: fi, est_fim_int: ie, est_fim_frac: fe, lado: s.lado, comprimento: s.comprimento, largura: s.largura, espessura: s._esp, quantidade: s.quantidade }; return { obra_id: S.obra.id, data: p.data, rdo_id: id, orcamento_item_id: s.orcamento_item_id, local: s.local, ...l, observacao: s.observacao, formula: calcMemoria(l, its[s.orcamento_item_id]).formula || `${nf(s.quantidade)} ${s.unidade || ''}` }; });
+          if (linhas.length) { await q(sb.from('memoria_calculo').insert(linhas)); mem += linhas.length; }
+        }
+        if (p.doc) { const ext = p.doc.name.split('.').pop().toLowerCase(); const cam = `${S.obra.id}/rdo/${p.data}_${Date.now()}.${ext}`; await q(sb.storage.from('documentos').upload(cam, p.doc, { upsert: true, contentType: p.doc.type || undefined })); await q(sb.from('rdo').update({ anexo_caminho: cam, anexo_nome: p.doc.name }).eq('id', id)); }
+        ok++;
+      } catch (x) { falhas.push(`${dt(p.data)}: ${x.message}`); }
+    }
+    $('#iPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:${falhas.length ? '#F1C4BE' : '#BFE3CF'}"><h3>${ok} RDO(s) importado(s)${mem ? ` · ${mem} linha(s) na memória de cálculo` : ''}</h3>${falhas.length ? `<p style="color:var(--er)">${falhas.map(h).join('<br>')}</p>` : '<p class="muted">Confira em Diários e, se for o caso, aprove.</p>'}</div>`);
+    toast(`${ok} RDO(s) importado(s)`, falhas.length ? 'erro' : 'ok');
+  };
+}
+/* anexo no editor do RDO */
+async function anexoRdo(id, r, ro) {
+  const box = $('#rdoAnexo'); if (!box) return;
+  const desenhar = () => { box.innerHTML = `${r.anexo_caminho ? `<button id="axVer"><i class="ti ti-file-text"></i>${h(r.anexo_nome || 'Documento do RDO')}</button>` : '<span class="muted">Sem documento anexado.</span>'} ${ro ? '' : '<label class="lk" style="cursor:pointer;color:var(--az);display:inline"><input type="file" id="axUp" accept=".pdf,.docx,.doc" style="display:none">Anexar / substituir PDF ou Word</label>'}`;
+    if ($('#axVer', box)) $('#axVer', box).onclick = async () => { try { const u = await q(sb.storage.from('documentos').createSignedUrl(r.anexo_caminho, 600, { download: r.anexo_nome || true })); const a = document.createElement('a'); a.href = u.signedUrl; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) { erro(e); } };
+    if ($('#axUp', box)) $('#axUp', box).onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const cam = `${S.obra.id}/rdo/${r.data}_${Date.now()}.${f.name.split('.').pop().toLowerCase()}`; await q(sb.storage.from('documentos').upload(cam, f, { upsert: true, contentType: f.type || undefined })); await q(sb.from('rdo').update({ anexo_caminho: cam, anexo_nome: f.name }).eq('id', id)); r.anexo_caminho = cam; r.anexo_nome = f.name; toast('Documento anexado', 'ok'); desenhar(); } catch (x) { erro(x); } };
+  };
+  desenhar();
 }
 
 </script>
