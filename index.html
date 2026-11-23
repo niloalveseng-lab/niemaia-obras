@@ -1768,30 +1768,54 @@ async function lerDocxRdo(file) {
   const tabelas = [...xml.getElementsByTagNameNS(W, 'tbl')].filter(ehTopo).map(t => [...t.childNodes].filter(n => n.localName === 'tr').map(tr => [...tr.childNodes].filter(n => n.localName === 'tc').map(tc => ({ t: txtC(tc), img: [...tc.getElementsByTagName('*')].filter(n => n.localName === 'blip').map(b => b.getAttributeNS(R, 'embed')).filter(Boolean) }))));
   const sec = re => tabelas.find(t => t.length && re.test(semAcento(t[0].map(c => c.t).join(' '))));
   const vazio = s => !s || /a preencher|^[—–-]+$/.test(semAcento(s));
+  const val = s => vazio(s) ? null : String(s).trim();
+  const num = s => { if (vazio(s)) return null; let x = String(s).replace(/[^\d,.\-]/g, ''); if (!/\d/.test(x)) return null; x = x.includes(',') ? x.replace(/\./g, '').replace(',', '.') : (/^\-?\d{1,3}(\.\d{3})+$/.test(x) ? x.replace(/\./g, '') : x); const n = Number(x); return isNaN(n) ? null : n; };
+  /* mapeia colunas pelo cabeçalho (linha 2 da tabela); regras em ordem, primeira que casar */
+  const mapa = (cab, regras, padrao) => { const m = {}; const hs = (cab || []).map(c => semAcento(c.t)); hs.forEach((hh, i) => { for (const [k, re] of regras) { if (m[k] == null && re.test(hh)) { m[k] = i; break; } } }); return Object.keys(m).length >= 2 ? m : padrao; };
+  const cel = (l, m, k) => m[k] != null && l[m[k]] ? l[m[k]].t : null;
   const todo = tabelas.flat(2).map(c => c.t).join(' | ');
   const r = { servicos: [], efetivo: [], equipamentos: [], _fotos: [], _doc: file, _av: [] };
   const md = todo.match(/Data:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i); r.data = md ? normData(md[1]) : normData((file.name.match(/\d{4}-\d{2}-\d{2}/) || [])[0]);
   const mn = todo.match(/RDO\s*N[ºo°.]*\s*:?\s*(\d+)/i); r.numero = mn ? mn[1] : null;
-  const mh = todo.match(/Hor[aá]rio:?\s*(\d{1,2}[:h]\d{2})\s*(?:às|as|a|-|–)\s*(\d{1,2}[:h]\d{2})/i); if (mh) { r.horario_inicio = mh[1].replace('h', ':'); r.horario_fim = mh[2].replace('h', ':'); }
-  const cab = semAcento((tabelas[0] || []).flat().map(c => c.t).join(' '));
+  const mh = todo.match(/Hor[aá]rio[^:]*:?\s*(\d{1,2}[:h]\d{2})\s*(?:às|as|a|-|–)\s*(\d{1,2}[:h]\d{2})/i); if (mh) { r.horario_inicio = mh[1].replace('h', ':'); r.horario_fim = mh[2].replace('h', ':'); }
+  const cab = semAcento((tabelas[0] || []).flat().map(c => c.t).join(' ') + ' ' + file.name);
   r.obra = /polo/.test(cab) ? 'POLO' : /alca/.test(cab) ? 'ALCA' : /ruas|pavimentacao/.test(cab) ? 'RUAS' : null;
+  /* 1. clima */
   const cl = sec(/clima|condic/);
-  if (cl) { const cond = []; cl.forEach(l => { const p0 = semAcento(l[0] && l[0].t); if (/^manh/.test(p0)) { r.clima_manha = l[1] && l[1].t; cond.push(normCond(l[2] && l[2].t)); } if (/^tarde/.test(p0)) { r.clima_tarde = l[1] && l[1].t; cond.push(normCond(l[2] && l[2].t)); } });
-    r.condicao = cond.length && cond.every(c => c === 'impraticavel') ? 'impraticavel' : cond.some(c => c !== 'praticavel') ? 'parcial' : 'praticavel'; }
+  if (cl) { const cond = []; const obs = []; cl.forEach(l => { const p0 = semAcento(l[0] && l[0].t); const per = /^manh/.test(p0) ? 'manha' : /^tarde/.test(p0) ? 'tarde' : null; if (!per) return; r['clima_' + per] = l[1] && l[1].t; cond.push(normCond(l[2] && l[2].t)); if (l[3] && val(l[3].t)) obs.push(`${per === 'manha' ? 'Manhã' : 'Tarde'}: ${l[3].t}`); });
+    r.condicao = cond.length && cond.every(c => c === 'impraticavel') ? 'impraticavel' : cond.some(c => c !== 'praticavel') ? 'parcial' : 'praticavel'; r._climaObs = obs; }
+  /* 2. efetivo */
   const ef = sec(/efetivo|mao de obra/);
-  if (ef) ef.slice(1).forEach(l => { const f = l[0] && l[0].t; if (!f || /^funcao|^total/.test(semAcento(f))) return; const qd = nOuNulo(l[1] && l[1].t); if (qd == null) { r._av.push(`Efetivo "${f}" sem quantidade`); return; } r.efetivo.push({ funcao: f, quantidade: qd, vinculo: l[2] ? l[2].t : 'proprio' }); });
+  if (ef) { const m = mapa(ef[1], [['funcao', /funcao|cargo/], ['qtd', /^qt|quant/], ['vinculo', /vinculo|empresa/], ['horas', /hora/], ['obs', /obs/]], { funcao: 0, qtd: 1, vinculo: 2 });
+    ef.slice(2).forEach(l => { const f = val(cel(l, m, 'funcao')); if (!f || /^total/.test(semAcento(f))) return; const qd = num(cel(l, m, 'qtd')); if (qd == null) { r._av.push(`Efetivo "${f}" sem quantidade`); return; } r.efetivo.push({ funcao: f, quantidade: qd, vinculo: cel(l, m, 'vinculo') || 'proprio', horas: num(cel(l, m, 'horas')), observacao: val(cel(l, m, 'obs')) }); }); }
+  /* 3. equipamentos */
   const eq = sec(/equipamento/);
-  if (eq) eq.slice(1).forEach(l => { const n = l[0] && l[0].t; if (!n || /^equipamento$/.test(semAcento(n))) return; r.equipamentos.push({ _nome: n, _qtd: nOuNulo(l[1] && l[1].t) || 1, prefixo: vazio(l[2] && l[2].t) ? null : l[2].t, motivo_parada: l[3] && !vazio(l[3].t) ? l[3].t : null }); });
+  if (eq) { const m = mapa(eq[1], [['diesel', /diesel|combust|litro/], ['hi', /horim.*ini|hor.*inicial/], ['hf', /horim.*fin|hor.*final/], ['himp', /improdut/], ['hprod', /produt|trabalhad/], ['hpar', /^h.*parad|horas parad/], ['motivo', /motivo|situac|ocorr|obs/], ['prefixo', /prefixo|frota|placa/], ['qtd', /^qt|quant/], ['nome', /equipamento|descri/]], { nome: 0, qtd: 1, prefixo: 2, motivo: 3 });
+    eq.slice(2).forEach(l => { const n = val(cel(l, m, 'nome')), pf = val(cel(l, m, 'prefixo')); if (!n && !pf) return; if (n && /^total/.test(semAcento(n))) return;
+      r.equipamentos.push({ _nome: n || pf, _qtd: num(cel(l, m, 'qtd')) || 1, prefixo: pf, horimetro_ini: num(cel(l, m, 'hi')), horimetro_fim: num(cel(l, m, 'hf')), horas_produtivas: num(cel(l, m, 'hprod')), horas_improdutivas: num(cel(l, m, 'himp')), horas_paradas: num(cel(l, m, 'hpar')), motivo_parada: val(cel(l, m, 'motivo')), diesel_litros: num(cel(l, m, 'diesel')) }); }); }
+  /* 4. serviços */
   const sv = sec(/servico/);
-  if (sv) sv.slice(1).forEach(l => { const s = l[0] && l[0].t; if (!s || /^servico$/.test(semAcento(s))) return; const loc = (l[1] && l[1].t) || ''; const desc = (l[2] && l[2].t) || '';
-    const me = loc.match(/(\d+)\s*\+\s*([\d.,]+)?\s*(?:a|à|até|ate|–|-)\s*(\d+)\s*\+\s*([\d.,]+)?/i); const ml = loc.match(/\b(LE|LD)\b|lado\s+(esquerdo|direito)|\beixo\b|ambos/i);
-    r.servicos.push({ servico: s, local: loc.replace(/\s*[–-]?\s*est\.?.*$/i, '').trim() || loc || null, estaca_ini: me ? `${me[1]}+${me[2] || 0}` : null, estaca_fim: me ? `${me[3]}+${me[4] || 0}` : null, lado: ml ? ml[0] : null, quantidade: nOuNulo(l[3] && l[3].t), unidade: l[4] ? l[4].t : null, observacao: desc || null }); });
-  const oc = sec(/ocorrenc/); if (oc) r.ocorrencias = oc.slice(1).flat().map(c => c.t).filter(Boolean).join('\n').replace(/ \| /g, '\n');
-  r.atividades = r.servicos.map(s => `${s.servico}${s.local ? ' – ' + s.local : ''}${s.quantidade != null ? ': ' + nf(s.quantidade, s.quantidade % 1 ? 2 : 0) + ' ' + (s.unidade || '') : ''}${s.observacao ? ' (' + s.observacao + ')' : ''}`).join('\n') || null;
+  if (sv) { const m = mapa(sv[1], [['item', /^item|codigo|cod\b/], ['ei', /est.*ini|^de$|estaca ini/], ['ef', /est.*fin|^ate$|estaca fin/], ['lado', /^lado/], ['comp', /^comp/], ['larg', /^larg/], ['esp', /^esp/], ['qtd', /^quant|^qtd/], ['un', /^un/], ['retr', /retrab/], ['servico', /servico/], ['local', /local|rua|trecho/], ['obs', /descri|obs/]], { servico: 0, local: 1, obs: 2, qtd: 3, un: 4 });
+    sv.slice(2).forEach(l => { const s = val(cel(l, m, 'servico')); if (!s || /^total/.test(semAcento(s))) return; const loc = cel(l, m, 'local') || '';
+      let ei = val(cel(l, m, 'ei')), efn = val(cel(l, m, 'ef')), lado = val(cel(l, m, 'lado'));
+      if (!ei) { const me = loc.match(/(\d+)\s*\+\s*([\d.,]+)?\s*(?:a|à|até|ate|–|-)\s*(\d+)\s*\+\s*([\d.,]+)?/i); if (me) { ei = `${me[1]}+${me[2] || 0}`; efn = `${me[3]}+${me[4] || 0}`; } }
+      if (!lado) { const ml = loc.match(/\b(LE|LD)\b|lado\s+(esquerdo|direito)|\beixo\b|ambos/i); lado = ml ? ml[0] : null; }
+      r.servicos.push({ item: val(cel(l, m, 'item')), servico: s, local: m.ei != null ? (val(loc) || null) : (loc.replace(/\s*[–-]?\s*est\.?.*$/i, '').trim() || val(loc) || null), estaca_ini: ei, estaca_fim: efn, lado, comprimento: num(cel(l, m, 'comp')), largura: num(cel(l, m, 'larg')), espessura: num(cel(l, m, 'esp')), quantidade: num(cel(l, m, 'qtd')), unidade: val(cel(l, m, 'un')), retrabalho: /^s/.test(semAcento(cel(l, m, 'retr') || '')) || /retrabalho/i.test(cel(l, m, 'obs') || ''), observacao: val(cel(l, m, 'obs')) }); }); }
+  /* 5. ocorrências / observações */
+  const so = x => /^\[?a preencher\]?$|^[—–-]+$/.test(semAcento(x).trim()); const lista = t => t ? t.slice(1).flat().map(c => c.t).filter(x => x && !so(x)).join('\n').replace(/ \| /g, '\n') : null;
+  const oc = sec(/ocorrenc/); r.ocorrencias = [lista(oc), ...(r._climaObs || []).map(x => 'Clima – ' + x)].filter(Boolean).join('\n') || null;
+  r.observacoes_fiscal = lista(sec(/fiscaliza/)) || null;
+  const at = sec(/atividade|resumo/); 
+  r.atividades = lista(at) || r.servicos.map(s => `${s.servico}${s.local ? ' – ' + s.local : ''}${s.estaca_ini ? ' – est. ' + s.estaca_ini + ' a ' + (s.estaca_fim || '') : ''}${s.lado ? ' ' + s.lado : ''}${s.quantidade != null ? ': ' + nf(s.quantidade, s.quantidade % 1 ? 2 : 0) + ' ' + (s.unidade || '') : ''}${s.observacao ? ' (' + s.observacao + ')' : ''}`).join('\n') || null;
+  /* 6. fotos: legenda "[Obra] – [Serviço] – [Rua/Est.] – L[E/D]" + data/hora + coordenadas */
   const ft = sec(/fotograf|foto/);
   if (ft) for (const l of ft.slice(1)) for (const c of l) for (const id of c.img) { const alvo = rel[id]; if (!alvo) continue; const z = zip.file('word/' + alvo.replace(/^\//, '').replace(/^word\//, '')); if (!z) continue;
-    const mdh = c.t.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s*(\d{1,2}:\d{2})?/); let dh = null; if (mdh) { const d = normData(mdh[1]); dh = new Date(`${d}T${mdh[2] || '12:00'}:00-03:00`).toISOString(); }
-    r._fotos.push({ blob: await z.async('blob'), nome: alvo.split('/').pop(), legenda: c.t || null, data_hora: dh }); }
+    const mdh = c.t.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s*(?:às\s*)?(\d{1,2}:\d{2})?/); let dh = null; if (mdh) { const d = normData(mdh[1]); dh = new Date(`${d}T${mdh[2] || '12:00'}:00-03:00`).toISOString(); }
+    const mc = c.t.match(/(-?\d{1,2}[.,]\d{3,})\s*[,;/ ]\s*(-?\d{1,3}[.,]\d{3,})/);
+    const leg = c.t.split(' | ').find(x => /\s[–-]\s/.test(x) && !/^\d{1,2}\//.test(x)) || c.t;
+    const pt = leg.split(/\s+[–-]\s+/).map(s => s.trim()).filter(s => !/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(s));
+    const ld = pt.length > 1 && /^(LE|LD|EIXO|AMBOS)$/i.test(pt[pt.length - 1]) ? pt.pop().toUpperCase() : null;
+    r._fotos.push({ blob: await z.async('blob'), nome: alvo.split('/').pop(), legenda: leg || null, data_hora: dh, servico: pt[1] || null, local: pt.slice(2).join(' – ') || null, lado: ld, latitude: mc ? Number(mc[1].replace(',', '.')) : null, longitude: mc ? Number(mc[2].replace(',', '.')) : null }); }
   return r;
 }
 /* Excel modelo → mesma estrutura do JSON */
@@ -1846,9 +1870,9 @@ async function importarRdo(c) {
         if (it && !uOk) av.push(`"${s.servico}" em ${s.unidade}: unidade diferente do item ${it.codigo || ''} (${it.unidade}) – não vai para a memória`);
         if (!it && r._doc) av.push(`"${s.servico}" sem item do orçamento – entra só no RDO`);
         const ul = s.unidade || (it && it.unidade) || null; return { orcamento_item_id: it ? it.id : null, servico: s.servico || (it && it.descricao) || 'Serviço', local: s.local || s.rua || null, estaca_ini: s.estaca_ini != null ? String(s.estaca_ini) : null, estaca_fim: s.estaca_fim != null ? String(s.estaca_fim) : null, lado: normLado(s.lado), comprimento: nOuNulo(s.comprimento), largura: nOuNulo(s.largura), quantidade: nOuNulo(s.quantidade), unidade: ul, retrabalho: !!s.retrabalho, observacao: s.observacao || null, _esp: nOuNulo(s.espessura), _semMem: !uOk }; });
-      const efetivo = (r.efetivo || []).filter(x => x.funcao && nOuNulo(x.quantidade) != null).map(x => ({ funcao: String(x.funcao).trim(), vinculo: semAcento(x.vinculo).startsWith('terc') ? 'terceiro' : 'proprio', quantidade: Math.round(nOuNulo(x.quantidade)), horas: nOuNulo(x.horas) ?? 8 }));
+      const efetivo = (r.efetivo || []).filter(x => x.funcao && nOuNulo(x.quantidade) != null).map(x => ({ funcao: String(x.funcao).trim(), vinculo: semAcento(x.vinculo).startsWith('terc') ? 'terceiro' : 'proprio', quantidade: Math.round(nOuNulo(x.quantidade)), horas: nOuNulo(x.horas) ?? 8, observacao: x.observacao || null }));
       const equips = []; const usados = new Set();
-      (r.equipamentos || []).forEach(x => { if (!x.prefixo && x._nome) { const pal = semAcento(x._nome).replace(/\(.*?\)/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 2 && !['com', 'de', 'para', 'terceirizado', 'proprio'].includes(w)); const pont = e => { const d = semAcento(e.descricao + ' ' + (e.tipo || '')); return pal.filter(w => d.includes(w)).length / Math.max(pal.length, 1); }; const cand = eqs.filter(e => !usados.has(e.id) && pont(e) >= 0.5).sort((a, b) => pont(b) - pont(a)).slice(0, x._qtd || 1); if (!cand.length) { av.push(`Equipamento "${x._nome}" sem prefixo e sem cadastro equivalente (ignorado)`); return; } if (cand.length < (x._qtd || 1)) av.push(`"${x._nome}": ${x._qtd} no RDO, ${cand.length} cadastrado(s)`); cand.forEach(e => { usados.add(e.id); equips.push({ equipamento_id: e.id, horimetro_ini: null, horimetro_fim: null, horas_produtivas: null, horas_improdutivas: null, horas_paradas: null, motivo_parada: x.motivo_parada || null, diesel_litros: null }); }); return; }
+      (r.equipamentos || []).forEach(x => { if (!x.prefixo && x._nome) { const pal = semAcento(x._nome).replace(/\(.*?\)/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 2 && !['com', 'de', 'para', 'terceirizado', 'proprio'].includes(w)); const pont = e => { const d = semAcento(e.descricao + ' ' + (e.tipo || '')); return pal.filter(w => d.includes(w)).length / Math.max(pal.length, 1); }; const cand = eqs.filter(e => !usados.has(e.id) && pont(e) >= 0.5).sort((a, b) => pont(b) - pont(a)).slice(0, x._qtd || 1); if (!cand.length) { av.push(`Equipamento "${x._nome}" sem prefixo e sem cadastro equivalente (ignorado)`); return; } if (cand.length < (x._qtd || 1)) av.push(`"${x._nome}": ${x._qtd} no RDO, ${cand.length} cadastrado(s)`); const um = cand.length === 1; cand.forEach(e => { usados.add(e.id); equips.push({ equipamento_id: e.id, horimetro_ini: um ? nOuNulo(x.horimetro_ini) : null, horimetro_fim: um ? nOuNulo(x.horimetro_fim) : null, horas_produtivas: nOuNulo(x.horas_produtivas), horas_improdutivas: nOuNulo(x.horas_improdutivas), horas_paradas: nOuNulo(x.horas_paradas), motivo_parada: x.motivo_parada || null, diesel_litros: um ? nOuNulo(x.diesel_litros) : null }); }); return; }
         const e = eqMap[semAcento(x.prefixo)]; if (!e) { av.push(`Prefixo "${x.prefixo}" não cadastrado (linha ignorada)`); return; } usados.add(e.id); const hi = nOuNulo(x.horimetro_ini), hf = nOuNulo(x.horimetro_fim); equips.push({ equipamento_id: e.id, horimetro_ini: hi, horimetro_fim: hf, horas_produtivas: nOuNulo(x.horas_produtivas) ?? (hi != null && hf != null ? Math.round((hf - hi) * 10) / 10 : 0), horas_improdutivas: nOuNulo(x.horas_improdutivas) ?? 0, horas_paradas: nOuNulo(x.horas_paradas) ?? 0, motivo_parada: x.motivo_parada || null, diesel_litros: nOuNulo(x.diesel_litros) }); });
       const doc = r._doc || (data ? docs.find(f => { const n = f.name; return n.includes(data) || n.includes(data.split('-').reverse().join('-')) || n.includes(data.split('-').reverse().join('.')) || n.includes(data.split('-').reverse().join('_')); }) : null);
       let acao = 'criar'; if (ex) acao = $('#iEx').value === 'substituir' ? (ex.status === 'aprovado' && !pode('aprovar') ? 'bloqueado' : 'substituir') : 'pular';
@@ -1876,7 +1900,7 @@ async function importarRdo(c) {
         if ($('#iFot').checked && p.fotos.length) {
           const jaTem = await q(sb.from('fotos').select('legenda').eq('rdo_id', id)); const leg = new Set(jaTem.map(f => f.legenda));
           for (const [k, f] of p.fotos.entries()) { if (f.legenda && leg.has(f.legenda)) continue; const u = await new Promise(ok2 => { const rd = new FileReader(); rd.onload = () => ok2(rd.result); rd.readAsDataURL(f.blob); }); const im = await reduzImg(u, 1920); const blob = im ? await (await fetch(im.url)).blob() : f.blob; const cam = `${S.obra.id}/${id}/${Date.now()}_${k}.jpg`;
-            await q(sb.storage.from('fotos').upload(cam, blob, { contentType: 'image/jpeg' })); await q(sb.from('fotos').insert({ obra_id: S.obra.id, rdo_id: id, caminho: cam, legenda: f.legenda, data_hora: f.data_hora || new Date(p.data + 'T12:00:00-03:00').toISOString() })); nf_++; }
+            await q(sb.storage.from('fotos').upload(cam, blob, { contentType: 'image/jpeg' })); await q(sb.from('fotos').insert({ obra_id: S.obra.id, rdo_id: id, caminho: cam, legenda: f.legenda, servico: f.servico || null, local: f.local || null, lado: f.lado ? normLado(f.lado) : null, latitude: f.latitude, longitude: f.longitude, data_hora: f.data_hora || new Date(p.data + 'T12:00:00-03:00').toISOString() })); nf_++; }
         }
         ok++;
       } catch (x) { falhas.push(`${dt(p.data)}: ${x.message}`); }
