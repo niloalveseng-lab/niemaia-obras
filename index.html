@@ -1474,7 +1474,8 @@ async function pgProdMes(el) {
   abas(el, [
     { t: 'Quadro do mês', f: c => quadroMes(c) },
     { t: 'Memória de cálculo diária', f: c => memoriaDia(c) },
-    { t: 'Metas e calendário', f: c => metasMes(c) }
+    { t: 'Metas e calendário', f: c => metasMes(c) },
+    { t: 'Importar avanços (fichas)', f: c => importarAvancos(c) }
   ]);
 }
 let MES_SEL = hoje().slice(0, 7), DIA_SEL = hoje();
@@ -1836,6 +1837,88 @@ async function anexoRdo(id, r, ro) {
     if ($('#axUp', box)) $('#axUp', box).onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const cam = `${S.obra.id}/rdo/${r.data}_${Date.now()}.${f.name.split('.').pop().toLowerCase()}`; await q(sb.storage.from('documentos').upload(cam, f, { upsert: true, contentType: f.type || undefined })); await q(sb.from('rdo').update({ anexo_caminho: cam, anexo_nome: f.name }).eq('id', id)); r.anexo_caminho = cam; r.anexo_nome = f.name; toast('Documento anexado', 'ok'); desenhar(); } catch (x) { erro(x); } };
   };
   desenhar();
+}
+
+/* ================= IMPORTAÇÃO DE AVANÇOS (fichas dos apontadores) ================= */
+const COLS_AV = ['data', 'item', 'local', 'estaca_ini', 'estaca_fim', 'lado', 'material', 'prefixo', 'viagens', 'cap_viagem', 'comprimento', 'largura', 'espessura', 'quantidade', 'camada', 'dmt_km', 'apontador', 'observacao'];
+function modeloAvancos() {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    [`FICHA DE APONTAMENTO DE AVANÇOS – ${S.obra.codigo} – ${S.obra.nome}`], ['Uma linha por caminhão/serviço. Item = código do orçamento. Estaca no formato 12+5. Quantidade em branco: o sistema calcula (viagens × capacidade, ou comprimento × largura × espessura).'], [],
+    COLS_AV,
+    ['23/11/2026', '01.999.06', 'Praça – aterro', '0+0', '5+0', 'EIXO', 'Solo de jazida (11 km)', 'POLO-CB-01', 12, 12, '', '', '', '', '1ª camada', 11, 'Apontador', ''],
+    ['23/11/2026', '01.510.00', 'Praça – aterro', '0+0', '5+0', 'EIXO', '', '', '', '', 100, 30, 0.2, '', '1ª camada', '', 'Apontador', 'Compactação']
+  ]);
+  ws['!cols'] = COLS_AV.map(c => ({ wch: ['local', 'material', 'observacao'].includes(c) ? 26 : 12 }));
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 17 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 17 } }];
+  XLSX.utils.book_append_sheet(wb, ws, 'AVANCOS');
+  const it = XLSX.utils.aoa_to_sheet([['Código', 'Item', 'Descrição', 'Unidade'], ...(S.ref.itens || []).map(i => [i.codigo || '', i.item || '', i.descricao, i.unidade])]);
+  it['!cols'] = [{ wch: 14 }, { wch: 8 }, { wch: 70 }, { wch: 8 }];
+  XLSX.utils.book_append_sheet(wb, it, 'ITENS DO ORCAMENTO');
+  XLSX.writeFile(wb, `${S.obra.codigo}_FICHA_AVANCOS.xlsx`);
+}
+function linhasAvancosXlsx(wb) {
+  const nome = wb.SheetNames.find(x => semAcento(x).startsWith('avanc')) || wb.SheetNames[0];
+  const aoa = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, defval: null });
+  const hi = aoa.findIndex(r => r.some(c => semAcento(c) === 'data') && r.some(c => semAcento(c) === 'item'));
+  if (hi < 0) throw new Error('Cabeçalho não encontrado (colunas "data" e "item"). Use o modelo da ficha.');
+  const H = aoa[hi].map(c => semAcento(c).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''));
+  return aoa.slice(hi + 1).filter(r => r.some(c => c !== null && c !== '')).map(r => Object.fromEntries(H.map((k, i) => [k, r[i]])));
+}
+async function importarAvancos(c) {
+  if (!pode('campo')) { c.innerHTML = '<div class="vazio">Seu perfil não importa avanços.</div>'; return; }
+  await refItens(true);
+  c.innerHTML = `<div class="g2"><div class="card"><h3>1. Ficha de avanços</h3><p class="muted">Planilha dos apontadores (modelo abaixo: uma linha por caminhão ou serviço) ou o arquivo <b>.json</b> que o Claude gera a partir das fichas. Também dá para colar o JSON.</p>
+  <input type="file" id="avArq" accept=".xlsx,.xls,.json,.txt"><textarea id="avTxt" placeholder='{"obra":"${S.obra.codigo}","avancos":[{"data":"2026-11-23","item":"01.999.06", ...}]}' style="margin-top:10px;min-height:100px;font-family:monospace;font-size:12px"></textarea>
+  <div class="bar" style="margin-top:10px"><button id="avMod"><i class="ti ti-file-spreadsheet"></i>Baixar ficha modelo (Excel)</button></div></div>
+  <div class="card"><h3>2. Opções</h3><div class="form"><div class="wf"><div class="chk"><input type="checkbox" id="avDup" checked><span>Pular linhas que já existem na memória (mesma data, item, local, estacas e quantidade)</span></div></div>
+  <div class="wf"><div class="chk"><input type="checkbox" id="avAgr"><span>Somar viagens do mesmo dia, item, local e estacas numa linha só (ex.: vários caminhões no mesmo trecho)</span></div></div></div>
+  <p class="muted" style="margin-top:12px">Quantidade em branco: o sistema calcula pela unidade do item (m³ = viagens × capacidade, ou comp. × larg. × esp.; m² = comp. × larg.; m = estacas). Em t.km e unidades sem regra, a quantidade precisa vir preenchida. Material, caminhão, DMT e apontador ficam registrados na memória.</p></div></div>
+  <div class="bar"><span class="sp"></span><button class="pri" id="avAn"><i class="ti ti-search"></i>Analisar</button></div><div id="avPrev"></div>`;
+  $('#avMod').onclick = modeloAvancos;
+  let linhas = null, plano = [];
+  $('#avArq').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { if (/\.xlsx?$/i.test(f.name)) { linhas = linhasAvancosXlsx(XLSX.read(await f.arrayBuffer())); $('#avTxt').value = `Planilha ${f.name}: ${linhas.length} linha(s).`; } else { $('#avTxt').value = await f.text(); linhas = null; } toast('Arquivo carregado. Clique em Analisar.'); } catch (x) { erro(x); } };
+  $('#avAn').onclick = async () => { try {
+    const t = $('#avTxt').value.trim();
+    if (t.startsWith('{') || t.startsWith('[')) { const j = JSON.parse(t.replace(/^```(json)?|```$/g, '')); if (j.obra && semAcento(j.obra).replace(/[^a-z]/g, '') !== semAcento(S.obra.codigo).replace(/[^a-z]/g, '')) throw new Error(`O arquivo é da obra ${j.obra}, mas a obra selecionada é ${S.obra.codigo}.`); linhas = Array.isArray(j) ? j : (j.avancos || []); }
+    if (!linhas || !linhas.length) throw new Error('Escolha a planilha ou cole o JSON.');
+    const itens = S.ref.itens; const itMap = Object.fromEntries(itens.map(i => [i.id, i]));
+    let L1 = linhas.map((r, k) => {
+      const av = []; const data = normData(r.data); if (!data) av.push('data inválida');
+      const it = acharItem(r.item || r.codigo, itens); if (!it) av.push(`item "${r.item || r.codigo || ''}" não encontrado`);
+      const [ii, fi] = parseEst(r.estaca_ini), [ie, fe] = parseEst(r.estaca_fim);
+      const l = { est_ini_int: ii, est_ini_frac: fi, est_fim_int: ie, est_fim_frac: fe, lado: normLado(r.lado), comprimento: nOuNulo(r.comprimento), largura: nOuNulo(r.largura), espessura: nOuNulo(r.espessura), n_viagens: nOuNulo(r.viagens), cap_viagem: nOuNulo(r.cap_viagem), quantidade: nOuNulo(r.quantidade) };
+      if (ii !== null && ie !== null && estM(ie, fe) < estM(ii, fi)) av.push('estaca final menor que a inicial');
+      return { k: k + 1, data, it, l, local: r.local || null, camada: r.camada || null, extra: { material: r.material || null, prefixo: r.prefixo || r.caminhao || r.placa || null, dmt: nOuNulo(r.dmt_km), apontador: r.apontador || null, obs: r.observacao || null }, av };
+    });
+    if ($('#avAgr').checked) { const g = {}; L1.forEach(x => { const key = [x.data, x.it && x.it.id, x.local, x.l.est_ini_int, x.l.est_ini_frac, x.l.est_fim_int, x.l.est_fim_frac, x.l.lado, x.l.cap_viagem, x.camada].join('|'); if (g[key] && x.l.n_viagens != null && g[key].l.n_viagens != null && x.l.quantidade == null && g[key].l.quantidade == null) { g[key].l.n_viagens += x.l.n_viagens; g[key].extra.prefixo = [g[key].extra.prefixo, x.extra.prefixo].filter(Boolean).join(', '); g[key].av.push(...x.av); } else g[key + (g[key] ? '#' + x.k : '')] = x; }); L1 = Object.values(g); }
+    const datas = [...new Set(L1.map(x => x.data).filter(Boolean))].sort();
+    const exist = datas.length ? await q(sb.from('memoria_calculo').select('data,orcamento_item_id,local,est_ini_int,est_ini_frac,est_fim_int,est_fim_frac,quantidade').eq('obra_id', S.obra.id).gte('data', datas[0]).lte('data', datas[datas.length - 1])) : [];
+    const chave = (d, i, loc, a, b, c2, d2, q2) => [d, i, semAcento(loc), a ?? '', Number(b) || 0, c2 ?? '', Number(d2) || 0, Math.round((Number(q2) || 0) * 100)].join('|');
+    const ks = new Set(exist.map(m => chave(m.data, m.orcamento_item_id, m.local, m.est_ini_int, m.est_ini_frac, m.est_fim_int, m.est_fim_frac, m.quantidade)));
+    plano = L1.map(x => {
+      const r = x.it ? calcMemoria(x.l, x.it) : {}; const qtd = x.l.quantidade ?? r.quantidade ?? null;
+      if (x.it && qtd == null) x.av.push(`quantidade não calculável para unidade ${x.it.unidade}: preencha a quantidade`);
+      const comp = r.comprimento ?? x.l.comprimento;
+      const extras = [x.extra.material, x.extra.prefixo ? 'caminhão ' + x.extra.prefixo : null, x.extra.dmt != null ? `DMT ${nf(x.extra.dmt, 1)} km` : null, x.extra.apontador ? 'apont. ' + x.extra.apontador : null].filter(Boolean).join(' · ');
+      const formula = (x.it ? (calcMemoria({ ...x.l, quantidade: qtd }, x.it).formula || `${nf(qtd)} ${x.it.unidade}`) : '') + (extras ? ` [${extras}]` : '');
+      const dup = x.it && x.data && qtd != null && ks.has(chave(x.data, x.it.id, x.local, x.l.est_ini_int, x.l.est_ini_frac, x.l.est_fim_int, x.l.est_fim_frac, qtd));
+      const okL = x.data && x.it && qtd != null && !x.av.some(a => a.includes('menor'));
+      return { ...x, qtd, comp, formula, dup, acao: !okL ? 'erro' : (dup && $('#avDup').checked ? 'pular' : 'importar'), obs: [x.extra.obs, extras].filter(Boolean).join(' · ') || null };
+    });
+    const totI = {}; plano.filter(p => p.acao === 'importar').forEach(p => { totI[p.it.id] = (totI[p.it.id] || 0) + p.qtd; });
+    const AC = { importar: '<span class="badge b-ok">Importar</span>', pular: '<span class="badge">Já existe</span>', erro: '<span class="badge b-er">Corrigir</span>' };
+    $('#avPrev').innerHTML = `<div class="card"><h3>Prévia: ${plano.length} linha(s) · ${plano.filter(p => p.acao === 'importar').length} para importar</h3>
+    <div class="kpis">${Object.entries(totI).map(([i, v]) => `<div class="kpi"><span>${h(itMap[i].codigo || '')} ${h(itMap[i].descricao).slice(0, 60)}</span><b>${nf(v)} ${h(itMap[i].unidade)}</b></div>`).join('')}</div>
+    <div class="tw" style="max-height:55vh"><table class="grid"><thead><tr><th>#</th><th>Ação</th><th>Data</th><th>Item</th><th>Local</th><th>Estacas</th><th>Lado</th><th>Memória</th><th class="n">Quantidade</th><th>Avisos</th></tr></thead><tbody>${plano.map(p => `<tr><td>${p.k}</td><td>${AC[p.acao]}</td><td>${dt(p.data)}</td><td>${p.it ? h((p.it.codigo || '') + ' ' + p.it.descricao).slice(0, 50) : '–'}</td><td>${h(p.local || '')}</td><td>${estTxt(p.l.est_ini_int, p.l.est_ini_frac)}${p.l.est_fim_int != null ? ' a ' + estTxt(p.l.est_fim_int, p.l.est_fim_frac) : ''}</td><td>${h(p.l.lado || '')}</td><td style="font-size:12.5px">${h(p.formula)}</td><td class="n">${nf(p.qtd)}</td><td style="font-size:12.5px;color:var(--er)">${p.av.map(h).join('<br>')}</td></tr>`).join('')}</tbody></table></div>
+    <div class="bar" style="margin-top:12px"><span class="sp"></span><button class="pri" id="avGo"><i class="ti ti-upload"></i>Importar ${plano.filter(p => p.acao === 'importar').length} linha(s)</button></div></div>`;
+    $('#avGo').onclick = async () => {
+      const bt = $('#avGo'); bt.disabled = true;
+      const rows = plano.filter(p => p.acao === 'importar').map(p => ({ obra_id: S.obra.id, data: p.data, orcamento_item_id: p.it.id, local: p.local, est_ini_int: p.l.est_ini_int, est_ini_frac: p.l.est_ini_frac, est_fim_int: p.l.est_fim_int, est_fim_frac: p.l.est_fim_frac, lado: p.l.lado, comprimento: p.comp ?? null, largura: p.l.largura, espessura: p.l.espessura, n_viagens: p.l.n_viagens, cap_viagem: p.l.cap_viagem, quantidade: p.qtd, formula: p.formula, camada: p.camada, observacao: p.obs }));
+      try { for (let i = 0; i < rows.length; i += 200) await q(sb.from('memoria_calculo').insert(rows.slice(i, i + 200))); toast(`${rows.length} avanço(s) lançado(s) na memória de cálculo`, 'ok'); $('#avPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:#BFE3CF"><h3>${rows.length} linha(s) importada(s)</h3><p class="muted">Confira no Quadro do mês e na Memória de cálculo diária.</p></div>`); }
+      catch (x) { erro(x); bt.disabled = false; }
+    };
+  } catch (x) { erro(x); } };
 }
 
 </script>
