@@ -189,7 +189,7 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px
  .tabs button{flex:0 0 auto;padding:0 12px;height:44px}
  .bar{gap:6px}.bar .busca{max-width:none;flex:1 1 100%;order:-1}
  .bar>button,.bar>select,.bar>.btf{flex:1 1 auto;justify-content:center}
- .bar .sp{display:none}
+ .bar .sp{display:none}.bar>p{flex:1 1 100%!important}
  .form{grid-template-columns:1fr;gap:10px}
  .ovl{padding:0;align-items:stretch}
  .mdl{width:100%;min-height:100%;border-radius:0;padding:16px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column}
@@ -1493,39 +1493,55 @@ async function pgUsuarios(el) {
       const [ps, uo, obras] = await Promise.all([q(sb.from('perfis').select('*').order('nome')), q(sb.from('usuarios_obras').select('*')), q(sb.from('obras').select('id,codigo,nome').order('codigo'))]);
       const oc = Object.fromEntries(obras.map(o => [o.id, o.codigo]));
       const perfisOp = Object.entries(L.perfil).filter(([k]) => k !== 'admin');
-      c.innerHTML = `<div class="bar"><p class="muted" style="margin:0;flex:1">O administrador cadastra cada pessoa aqui: o sistema cria o acesso com uma senha provisória para você enviar a ela. No primeiro acesso, a pessoa troca a senha no botão da chave, no topo.</p><button class="pri" id="uNovo"><i class="ti ti-user-plus"></i>Novo usuário</button></div>
-      <div class="tw"><table class="grid"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Admin</th><th>Ativo</th><th>Acessos por obra</th><th>Liberar obra</th><th></th></tr></thead><tbody>${ps.map(p => `<tr data-u="${p.id}"><td><b>${h(p.nome)}</b></td><td>${h(p.email)}</td><td class="ed"><input data-c="cargo" value="${h(p.cargo || '')}" style="min-width:130px"></td>
-      <td class="ed"><input type="checkbox" data-c="admin" ${p.admin ? 'checked' : ''} ${p.id === S.me.id ? 'disabled' : ''}></td><td class="ed"><input type="checkbox" data-c="ativo" ${p.ativo ? 'checked' : ''} ${p.id === S.me.id ? 'disabled' : ''}></td>
-      <td>${p.admin ? '<span class="badge b-la">Todas (administrador)</span>' : (uo.filter(x => x.user_id === p.id).map(x => `<span class="badge b-la" style="margin:2px">${h(oc[x.obra_id])} – ${h(L.perfil[x.perfil])} <button class="lk" data-rm="${x.obra_id}" aria-label="Remover acesso">×</button></span>`).join('') || '<span class="muted">nenhuma</span>')}</td>
-      <td class="ed"><div style="display:flex;gap:4px"><select data-o style="width:90px"><option value="">Obra</option>${obras.map(o => `<option value="${o.id}">${h(o.codigo)}</option>`).join('')}</select><select data-p>${perfisOp.map(([k, l]) => `<option value="${k}">${h(l)}</option>`).join('')}</select><button data-add>Liberar</button></div></td>
-      <td class="ed"><div style="display:flex;gap:4px">${p.id === S.me.id ? '<span class="muted">você</span>' : '<button data-senha title="Gerar nova senha provisória"><i class="ti ti-key"></i>Nova senha</button><button class="er" data-del title="Excluir usuário"><i class="ti ti-trash"></i>Excluir</button>'}</div></td></tr>`).join('')}</tbody></table></div>`;
+      const acessoHtml = p => p.admin ? '<span class="badge b-er"><i class="ti ti-crown"></i>Administrador – acesso total</span>' : (uo.filter(x => x.user_id === p.id).map(x => `<span class="badge b-la" style="margin:2px">${h(oc[x.obra_id])} – ${h(L.perfil[x.perfil])}</span>`).join('') || '<span class="badge b-av">Sem obra liberada</span>');
+      c.innerHTML = `<div class="bar"><p class="muted" style="margin:0;flex:1">Cadastre cada pessoa aqui, com a função em cada obra (ou Administrador, que acessa tudo). O sistema gera uma senha provisória para você enviar; no primeiro acesso a pessoa troca a senha no botão da chave, no topo. Para mudar dados, função ou obras depois, use <b>Editar</b>.</p><button class="pri" id="uNovo"><i class="ti ti-user-plus"></i>Novo usuário</button></div>
+      <div class="tw"><table class="grid lst"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Função / acesso</th><th>Situação</th><th></th></tr></thead><tbody>${ps.map(p => `<tr data-u="${p.id}"><td data-l="Nome"><b>${h(p.nome)}</b>${p.id === S.me.id ? ' <span class="muted">(você)</span>' : ''}</td><td data-l="E-mail">${h(p.email)}</td><td data-l="Cargo">${h(p.cargo || '–')}</td><td data-l="Acesso">${acessoHtml(p)}</td><td data-l="Situação">${p.ativo ? '<span class="badge b-ok">Ativo</span>' : '<span class="badge b-er">Bloqueado</span>'}</td>
+      <td data-l=""><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end"><button data-ed title="Editar dados, função e obras"><i class="ti ti-pencil"></i>Editar</button>${p.id === S.me.id ? '' : '<button data-senha title="Gerar nova senha provisória"><i class="ti ti-key"></i>Nova senha</button><button class="er" data-del title="Excluir usuário"><i class="ti ti-trash"></i>Excluir</button>'}</div></td></tr>`).join('')}</tbody></table></div>`;
       const credenciais = (nome, email, senha) => {
-        const txt = `Olá, ${nome.split(' ')[0]}! Seu acesso ao sistema de Gestão de Obras da NIEMAIA está pronto.\nE-mail: ${email}\nSenha provisória: ${senha}\nAbra o sistema, entre e troque a senha no botão da chave, no topo da tela.`;
-        modal('Acesso pronto', `<p>Envie os dados abaixo para a pessoa (WhatsApp ou e-mail). A senha não fica salva para consulta depois.</p><textarea id="cred" style="min-height:120px" readonly>${h(txt)}</textarea>`, [{ t: 'Copiar mensagem', c: 'pri', f: async o => { try { await navigator.clipboard.writeText($('#cred', o).value); toast('Mensagem copiada', 'ok'); } catch (e) { $('#cred', o).select(); toast('Selecione e copie o texto (Ctrl+C).'); } return false; } }]);
+        const txt = `Olá, ${nome.split(' ')[0]}! Seu acesso ao sistema de Gestão de Obras da NIEMAIA está pronto.\nEndereço: ${location.origin + location.pathname}\nE-mail: ${email}\nSenha provisória: ${senha}\nEntre e troque a senha no botão da chave, no topo da tela.`;
+        modal('Acesso pronto', `<p>Envie os dados abaixo para a pessoa (WhatsApp ou e-mail). A senha não fica salva para consulta depois.</p><textarea id="cred" style="min-height:130px" readonly>${h(txt)}</textarea>`, [{ t: 'Copiar mensagem', c: 'pri', f: async o => { try { await navigator.clipboard.writeText($('#cred', o).value); toast('Mensagem copiada', 'ok'); } catch (e) { $('#cred', o).select(); toast('Selecione e copie o texto (Ctrl+C).'); } return false; } }]);
       };
-      $('#uNovo').onclick = () => {
+      /* formulário único: novo e editar */
+      const formUsuario = p => {
+        const eu = p && p.id === S.me.id; const meus = p ? Object.fromEntries(uo.filter(x => x.user_id === p.id).map(x => [x.obra_id, x.perfil])) : {};
         const b = document.createElement('div');
-        b.innerHTML = `<div class="form"><div class="w2"><label for="nN">Nome completo *</label><input id="nN" autocomplete="off"></div><div><label for="nE">E-mail *</label><input id="nE" type="email" autocomplete="off"></div><div><label for="nC">Cargo</label><input id="nC" list="dlCargo"><datalist id="dlCargo">${['Engenheiro civil', 'Auxiliar de engenharia', 'Encarregado', 'Apontador', 'Almoxarife', 'Técnico de segurança', 'Topógrafo', 'Fiscal da Prefeitura'].map(x => `<option value="${x}">`).join('')}</datalist></div>
-        <div><label for="nS">Senha provisória *</label><div style="display:flex;gap:6px"><input id="nS" value="${senhaProvisoria()}"><button type="button" id="nG" title="Gerar outra"><i class="ti ti-refresh"></i></button></div></div><div><label>&nbsp;</label><div class="chk"><input type="checkbox" id="nA"><span>Administrador (todas as obras)</span></div></div></div>
-        <h3>Obras e perfil</h3><div class="tw"><table class="grid"><thead><tr><th>Obra</th><th>Perfil de acesso</th></tr></thead><tbody>${obras.map(o => `<tr><td><b>${h(o.codigo)}</b> – ${h(o.nome)}</td><td class="ed"><select data-ob="${o.id}"><option value="">Sem acesso</option>${perfisOp.map(([k, l]) => `<option value="${k}">${h(l)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`;
-        $('#nG', b).onclick = () => { $('#nS', b).value = senhaProvisoria(); };
-        modal('Novo usuário', b, [{ t: 'Cadastrar', c: 'pri', f: async () => {
-          const nome = $('#nN', b).value.trim(), email = $('#nE', b).value.trim(), senha = $('#nS', b).value, adm = $('#nA', b).checked;
+        b.innerHTML = `<div class="form"><div class="w2"><label for="nN">Nome completo *</label><input id="nN" autocomplete="off" value="${h(p ? p.nome || '' : '')}"></div><div><label for="nE">E-mail (login) *</label><input id="nE" type="email" autocomplete="off" value="${h(p ? p.email || '' : '')}"></div><div><label for="nC">Cargo</label><input id="nC" list="dlCargo" value="${h(p ? p.cargo || '' : '')}"><datalist id="dlCargo">${['Engenheiro civil', 'Auxiliar de engenharia', 'Encarregado', 'Apontador', 'Almoxarife', 'Técnico de segurança', 'Topógrafo', 'Financeiro', 'Fiscal da Prefeitura'].map(x => `<option value="${x}">`).join('')}</datalist></div>
+        ${p ? `<div><label for="nAt">Situação</label><select id="nAt" ${eu ? 'disabled' : ''}><option value="1" ${p.ativo ? 'selected' : ''}>Ativo</option><option value="0" ${p.ativo ? '' : 'selected'}>Bloqueado (não entra no sistema)</option></select></div>` : `<div><label for="nS">Senha provisória *</label><div style="display:flex;gap:6px"><input id="nS" value="${senhaProvisoria()}"><button type="button" id="nG" title="Gerar outra"><i class="ti ti-refresh"></i></button></div></div>`}
+        <div class="wf"><label for="nF">Função no sistema *</label><select id="nF" ${eu ? 'disabled' : ''}><option value="obra" ${p && p.admin ? '' : 'selected'}>Por obra – escolher a função em cada obra abaixo</option><option value="admin" ${p && p.admin ? 'selected' : ''}>Administrador – acesso total: todas as obras, todos os módulos, usuários e aprovações</option></select>${eu ? '<div class="muted">Você não pode alterar a própria função nem se bloquear.</div>' : ''}</div></div>
+        <div id="nObras"><h3>Função em cada obra</h3><div class="tw"><table class="grid"><thead><tr><th>Obra</th><th>Função</th></tr></thead><tbody>${obras.map(o => `<tr><td><b>${h(o.codigo)}</b> – ${h(o.nome)}</td><td class="ed"><select data-ob="${o.id}"><option value="">Sem acesso</option>${perfisOp.map(([k, l]) => `<option value="${k}" ${meus[o.id] === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+        <p class="muted">Engenheiro gestor aprova RDO e medição; auxiliar lança tudo sem aprovar; apontador lança RDO e produção, sem custos; almoxarife cuida de suprimentos; fiscal só consulta.</p></div>`;
+        const vis = () => { $('#nObras', b).style.display = $('#nF', b).value === 'admin' ? 'none' : ''; }; $('#nF', b).onchange = vis; vis();
+        if ($('#nG', b)) $('#nG', b).onclick = () => { $('#nS', b).value = senhaProvisoria(); };
+        modal(p ? `Editar usuário – ${p.nome}` : 'Novo usuário', b, [{ t: p ? 'Salvar' : 'Cadastrar', c: 'pri', f: async () => {
+          const nome = $('#nN', b).value.trim(), email = $('#nE', b).value.trim().toLowerCase(), cargo = $('#nC', b).value.trim() || null, adm = $('#nF', b).value === 'admin';
           if (!nome || !email) throw new Error('Preencha nome e e-mail.');
           const acessos = $$('select[data-ob]', b).filter(s => s.value).map(s => ({ obra_id: s.dataset.ob, perfil: s.value }));
-          if (!adm && !acessos.length) throw new Error('Libere pelo menos uma obra ou marque como administrador.');
-          await fnAdmin({ acao: 'criar', nome, email, senha, cargo: $('#nC', b).value.trim() || null, admin: adm, acessos });
-          toast('Usuário cadastrado', 'ok'); pgUsuarios(el); setTimeout(() => credenciais(nome, email, senha), 300);
+          if (!adm && !acessos.length) throw new Error('Escolha a função em pelo menos uma obra ou marque Administrador.');
+          if (!p) {
+            const senha = $('#nS', b).value;
+            await fnAdmin({ acao: 'criar', nome, email, senha, cargo, admin: adm, acessos });
+            toast('Usuário cadastrado', 'ok'); pgUsuarios(el); setTimeout(() => credenciais(nome, email, senha), 300); return;
+          }
+          if (email !== (p.email || '').toLowerCase()) await fnAdmin({ acao: 'email', user_id: p.id, email });
+          const upd = { nome, cargo }; if (!eu) { upd.admin = adm; upd.ativo = $('#nAt', b).value === '1'; }
+          await q(sb.from('perfis').update(upd).eq('id', p.id));
+          if (!adm) {
+            const quer = Object.fromEntries(acessos.map(a => [a.obra_id, a.perfil]));
+            const tirar = Object.keys(meus).filter(o => !quer[o]);
+            if (tirar.length) await q(sb.from('usuarios_obras').delete().eq('user_id', p.id).in('obra_id', tirar));
+            const mudar = acessos.filter(a => meus[a.obra_id] !== a.perfil);
+            if (mudar.length) await q(sb.from('usuarios_obras').upsert(mudar.map(a => ({ user_id: p.id, ...a })), { onConflict: 'user_id,obra_id' }));
+          }
+          toast('Usuário atualizado', 'ok'); if (eu) { S.me.nome = nome; } pgUsuarios(el);
         } }]);
       };
-      c.onchange = async e => { const tr = e.target.closest('tr[data-u]'), cc = e.target.dataset.c; if (!tr || !cc) return; try { await q(sb.from('perfis').update({ [cc]: e.target.type === 'checkbox' ? e.target.checked : (e.target.value || null) }).eq('id', tr.dataset.u)); toast('Usuário atualizado', 'ok'); if (cc === 'admin') pgUsuarios(el); } catch (x) { erro(x); } };
+      $('#uNovo').onclick = () => formUsuario(null);
       c.onclick = async e => {
-        const tr = e.target.closest('tr[data-u]'); if (!tr) return; const bt = e.target.closest('button'); if (!bt) return;
+        const tr = e.target.closest('tr[data-u]'); if (!tr) return; const bt = e.target.closest('button'); if (!bt) return; const p = ps.find(x => x.id === tr.dataset.u);
         try {
-          if (bt.dataset.rm) { await q(sb.from('usuarios_obras').delete().eq('user_id', tr.dataset.u).eq('obra_id', bt.dataset.rm)); toast('Acesso removido'); pgUsuarios(el); }
-          if (bt.hasAttribute('data-add')) { const o = $('[data-o]', tr).value; if (!o) throw new Error('Escolha a obra.'); await q(sb.from('usuarios_obras').upsert({ user_id: tr.dataset.u, obra_id: o, perfil: $('[data-p]', tr).value })); toast('Acesso liberado', 'ok'); pgUsuarios(el); }
-          if (bt.hasAttribute('data-del')) { const p = ps.find(x => x.id === tr.dataset.u); confirma(`Excluir ${p.nome} (${p.email})? O acesso e as liberações de obra serão apagados e não há como desfazer. Se a pessoa tiver lançamentos (RDO, memória, abastecimentos, fotos), o sistema não exclui: bloqueie desmarcando "Ativo".`, async () => { await fnAdmin({ acao: 'excluir', user_id: p.id }); toast(`${p.nome} excluído`, 'ok'); pgUsuarios(el); }); }
-          if (bt.hasAttribute('data-senha')) { const p = ps.find(x => x.id === tr.dataset.u); confirma(`Gerar nova senha provisória para ${p.nome}? A senha atual deixa de valer.`, async () => { const s = senhaProvisoria(); await fnAdmin({ acao: 'senha', user_id: p.id, senha: s }); setTimeout(() => credenciais(p.nome, p.email, s), 200); }); }
+          if (bt.hasAttribute('data-ed')) formUsuario(p);
+          if (bt.hasAttribute('data-del')) confirma(`Excluir ${p.nome} (${p.email})? O acesso e as liberações de obra serão apagados e não há como desfazer. Se a pessoa tiver lançamentos (RDO, memória, abastecimentos, fotos), o sistema não exclui: bloqueie em Editar → Situação.`, async () => { await fnAdmin({ acao: 'excluir', user_id: p.id }); toast(`${p.nome} excluído`, 'ok'); pgUsuarios(el); });
+          if (bt.hasAttribute('data-senha')) confirma(`Gerar nova senha provisória para ${p.nome}? A senha atual deixa de valer.`, async () => { const s = senhaProvisoria(); await fnAdmin({ acao: 'senha', user_id: p.id, senha: s }); setTimeout(() => credenciais(p.nome, p.email, s), 200); });
         } catch (x) { erro(x); }
       };
     } },
