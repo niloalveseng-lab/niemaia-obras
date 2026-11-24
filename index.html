@@ -143,17 +143,80 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px
 .fotos figcaption{font-size:12px;padding:7px 8px}
 .chk{display:flex;gap:8px;align-items:center}.chk input{width:16px}
 .pend{background:var(--avf);color:var(--av);padding:10px 14px;border-radius:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+/* comprovantes, importação, pendências */
+.btf{border:1px solid var(--lin);background:#fff;border-radius:8px;padding:0 14px;height:38px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:500;color:var(--txt);font-size:14px;margin:0}
+.btf:hover{background:#F8F9FB}.btf .ti{font-size:18px}
+.anexo .axl{margin-bottom:6px}.anexo input[type=file]{height:auto;padding:8px}
+.kpi.alerta::after{background:var(--er)}.kpi.alerta b{color:var(--er)}
+.cpl{display:flex;flex-direction:column;gap:12px}
+.cpi{display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;border:1px solid var(--lin);border-radius:12px;padding:12px;background:#FCFCFD}
+.cpt{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.cpt img{width:140px;height:140px;object-fit:cover;border-radius:8px;border:1px solid var(--lin)}
+.cpt>.ti{font-size:64px;color:var(--er)}.cpt small{font-size:11.5px;color:var(--mut);word-break:break-all}
+.cpi .form{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.ipg .bar{align-items:flex-start}
+.scrim{display:none}
+.bnav{display:none}
 @media(max-width:900px){
  .app{grid-template-columns:1fr}
- .side{position:fixed;left:0;top:0;bottom:0;width:260px;z-index:40;transform:translateX(-100%);transition:transform .2s;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+ .side{position:fixed;left:0;top:0;bottom:0;width:min(290px,84vw);z-index:60;transform:translateX(-105%);transition:transform .22s ease;box-shadow:0 10px 30px rgba(0,0,0,.25);height:100%}
  .side.on{transform:none}
- .menu-btn{display:inline-flex}
- .top{padding:0 12px;gap:8px}.user .nm{display:none}.top .obra .st{display:none}
+ .side.on~.scrim{display:block;position:fixed;inset:0;background:rgba(20,21,24,.45);z-index:55}
+ .side a{padding:11px 12px;font-size:15px}
+ .menu-btn{display:inline-flex;padding:0 10px}
+ .top{padding:0 10px;gap:6px;height:56px}
+ .user,.top .obra .st{display:none}
+ #btSair{padding:0 10px;font-size:0;gap:0}#btSair .ti{font-size:19px}#btSenha{padding:0 10px}
+ .top .obra{flex:1;gap:6px}.top .obra .cod{display:none}.top select{max-width:none;width:100%;font-size:14px;text-overflow:ellipsis;padding-right:20px}
  .g2{grid-template-columns:1fr}
- .cont{padding:16px 12px 32px}
- .form .w2{grid-column:1/-1}
- .gantt .row,.gantt .esc{grid-template-columns:140px minmax(0,1fr)}
+ .cont{padding:14px 12px 32px}
+ .form{grid-template-columns:1fr 1fr}.form .w2{grid-column:1/-1}
+ .gantt .row,.gantt .esc{grid-template-columns:120px minmax(0,1fr)}
  .login{grid-template-columns:1fr}.login .lado{display:none}
+}
+@media(max-width:700px){
+ body{font-size:15px}
+ input,select,textarea{font-size:16px;height:44px}textarea{height:auto}
+ button,.btf{height:42px}
+ .grid input,.grid select{height:38px;font-size:15px}
+ h1{font-size:21px}.pghead{margin-bottom:12px}.pghead p{font-size:12.5px}
+ .cont{padding:12px 10px calc(84px + env(safe-area-inset-bottom))}
+ .card{padding:14px 12px;border-radius:12px}
+ .kpis{grid-template-columns:1fr 1fr;gap:8px}
+ .kpi{padding:10px 12px}.kpi b{font-size:19px}.kpi span{font-size:11.5px}.kpi small{font-size:11px}
+ .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin:0 -10px 14px;padding:0 10px}
+ .tabs::-webkit-scrollbar{display:none}
+ .tabs button{flex:0 0 auto;padding:0 12px;height:44px}
+ .bar{gap:6px}.bar .busca{max-width:none;flex:1 1 100%;order:-1}
+ .bar>button,.bar>select,.bar>.btf{flex:1 1 auto;justify-content:center}
+ .bar .sp{display:none}
+ .form{grid-template-columns:1fr;gap:10px}
+ .ovl{padding:0;align-items:stretch}
+ .mdl{width:100%;min-height:100%;border-radius:0;padding:16px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column}
+ .mdl .mb{flex:1}
+ .mdl .acts{position:sticky;bottom:0;background:#fff;margin:12px -14px 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+ .mdl .acts button{flex:1 1 auto;justify-content:center}.mdl .acts .sp{display:none}
+ #toast{left:10px;right:10px;bottom:calc(74px + env(safe-area-inset-bottom));max-width:none}
+ .fotos{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.fotos img{height:110px}
+ .cpi{grid-template-columns:1fr}.cpt{flex-direction:row;text-align:left}.cpt img{width:72px;height:72px}.cpt>.ti{font-size:40px}
+ .cpi .form{grid-template-columns:1fr 1fr}
+ /* listas viram cartões */
+ .tw:has(table.lst){background:none;border:0;box-shadow:none;overflow:visible}
+ table.lst,table.lst tbody,table.lst tfoot{display:block}
+ table.lst thead{display:none}
+ table.lst tr{display:block;background:#fff;border:1px solid var(--lin);border-radius:12px;padding:8px 12px;margin-bottom:8px;box-shadow:var(--sh)}
+ table.lst td{display:flex;justify-content:space-between;gap:12px;border:0;padding:4px 0;text-align:right;font-size:14px}
+ table.lst td::before{content:attr(data-l);color:var(--mut);font-size:12.5px;text-align:left;flex:0 0 auto;max-width:45%}
+ table.lst td:first-child{font-weight:600;font-size:15px}
+ table.lst td:empty,table.lst td[data-l=""]::before{display:none}
+ table.lst td.vazio{justify-content:center}table.lst td.vazio::before{display:none}
+ table.lst tfoot tr{background:#F8F9FB}
+ table.lst tbody tr:hover td{background:none}
+ /* barra inferior */
+ .bnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--lin);padding:4px 2px env(safe-area-inset-bottom);box-shadow:0 -4px 16px rgba(16,24,40,.06)}
+ .bnav a,.bnav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:56px;color:#6B6F78;text-decoration:none;font-size:10.5px;font-weight:500;border:0;background:none;padding:0;border-radius:10px}
+ .bnav .ti{font-size:22px}
+ .bnav a.at{color:var(--lar2)}.bnav a.at .ti{color:var(--lar)}
 }
 @media print{.side,.top{display:none}}
 
@@ -208,7 +271,9 @@ const L = {
   propriedade: { proprio: 'Próprio', locado: 'Locado', terceiro_producao: 'Terceiro (produção)' },
   status_eq: { operando: 'Operando', parado: 'Parado', manutencao: 'Em manutenção', mobilizacao: 'Mobilização', desmobilizado: 'Desmobilizado' },
   manut: { preventiva: 'Preventiva', corretiva: 'Corretiva' },
-  categoria: { mao_de_obra: 'Mão de obra', equipamento: 'Equipamento', material: 'Material', terceiros: 'Terceiros', administracao: 'Administração local', outros: 'Outros' },
+  categoria: { mao_de_obra: 'Mão de obra', equipamento: 'Equipamento', material: 'Material', terceiros: 'Terceiros', administracao: 'Administração local', alimentacao: 'Alimentação', alojamento: 'Alojamento', transporte: 'Transporte', outros: 'Outros' },
+  apoio: { alimentacao: 'Alimentação', alojamento: 'Alojamento', transporte: 'Transporte' },
+  pagamento: { pix: 'PIX', dinheiro: 'Dinheiro', cartao_empresa: 'Cartão da empresa', boleto: 'Boleto', faturado: 'Faturado (a prazo)', transferencia: 'Transferência', reembolso: 'Reembolso a colaborador' },
   mov: { pedido: 'Pedido', entrada: 'Entrada', saida: 'Saída' },
   status_mov: { aberto: 'Aberto', concluido: 'Concluído', cancelado: 'Cancelado' },
   aditivo: { prazo: 'Prazo', valor: 'Valor', quantidade: 'Quantidade', prazo_valor: 'Prazo e valor' },
@@ -424,7 +489,7 @@ async function crud(el, cfg) {
   };
   let rows = await carregar(); let busca = '', sk = null, sd = 1;
   const cols = cfg.cols.filter(c => !c.formOnly);
-  el.innerHTML = `${cfg.intro ? `<p class="muted">${cfg.intro}</p>` : ''}<div class="bar"><input class="busca" placeholder="Buscar" aria-label="Buscar">${canW && !cfg.noNew ? `<button class="pri novo">${h(cfg.novo || 'Novo')}</button>` : ''}${cfg.botoes || ''}<span class="sp"></span><button class="xl">Excel</button><button class="pdf">PDF</button></div><div class="topx"></div><div class="tw"><table class="grid"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>`;
+  el.innerHTML = `${cfg.intro ? `<p class="muted">${cfg.intro}</p>` : ''}<div class="bar"><input class="busca" placeholder="Buscar" aria-label="Buscar">${canW && !cfg.noNew ? `<button class="pri novo">${h(cfg.novo || 'Novo')}</button>` : ''}${cfg.botoes || ''}<span class="sp"></span><button class="xl">Excel</button><button class="pdf">PDF</button></div><div class="topx"></div><div class="tw"><table class="grid lst"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>`;
   const filtrados = () => {
     let r = rows;
     if (busca) { const b = busca.toLowerCase(); r = r.filter(x => cols.some(c => String(valCel(c, x, true)).toLowerCase().includes(b))); }
@@ -435,8 +500,8 @@ async function crud(el, cfg) {
   const desenhar = () => {
     const r = filtrados();
     $('thead', el).innerHTML = '<tr>' + cols.map(c => `<th class="${isN(c) ? 'n' : ''}" data-k="${c.k}">${h(c.l)}${sk === c.k ? (sd > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr>';
-    $('tbody', el).innerHTML = r.length ? r.map((x, i) => `<tr class="clk" data-i="${rows.indexOf(x)}">` + cols.map(c => `<td class="${isN(c) ? 'n' : ''}">${valCel(c, x)}</td>`).join('') + '</tr>').join('') : `<tr><td colspan="${cols.length}" class="vazio">${h(cfg.vazio || 'Nenhum registro.')}</td></tr>`;
-    $('tfoot', el).innerHTML = cols.some(c => c.sum) && r.length ? '<tr>' + cols.map((c, i) => `<td class="${isN(c) ? 'n' : ''}">${c.sum ? (c.t === 'money' ? brl(soma(r, x => valCel(c, x, true))) : nf(soma(r, x => valCel(c, x, true)), c.d ?? 2)) : (i === 0 ? 'Total' : '')}</td>`).join('') + '</tr>' : '';
+    $('tbody', el).innerHTML = r.length ? r.map((x, i) => `<tr class="clk" data-i="${rows.indexOf(x)}">` + cols.map(c => `<td class="${isN(c) ? 'n' : ''}" data-l="${h(c.l)}">${valCel(c, x)}</td>`).join('') + '</tr>').join('') : `<tr><td colspan="${cols.length}" class="vazio">${h(cfg.vazio || 'Nenhum registro.')}</td></tr>`;
+    $('tfoot', el).innerHTML = cols.some(c => c.sum) && r.length ? '<tr>' + cols.map((c, i) => `<td class="${isN(c) ? 'n' : ''}" data-l="${c.sum ? h(c.l) : ''}">${c.sum ? (c.t === 'money' ? brl(soma(r, x => valCel(c, x, true))) : nf(soma(r, x => valCel(c, x, true)), c.d ?? 2)) : (i === 0 ? 'Total' : '')}</td>`).join('') + '</tr>' : '';
     if (cfg.resumo) cfg.resumo($('.topx', el), r);
   };
   desenhar();
@@ -489,16 +554,39 @@ async function formCrud(cfg, row, depois, canW) {
   box.innerHTML = campos.map(c => campoHtml(c, row ? row[c.k] : undefined)).join('');
   if (!canW) $$('input,select,textarea', box).forEach(e => e.disabled = true);
   if (cfg.calc) { const f = () => cfg.calc(box); box.addEventListener('input', f); f(); }
+  if (cfg.anexo) {
+    box.insertAdjacentHTML('beforeend', `<div class="wf anexo"><label>${h(cfg.anexo.rotulo || 'Comprovante (foto, PDF ou nota)')}</label><div class="axl">${row && row.anexo_caminho ? `<button type="button" class="axver"><i class="ti ti-paperclip"></i>${h(row.anexo_nome || 'Ver comprovante')}</button>` : '<span class="muted">Sem comprovante anexado.</span>'}</div>${canW ? '<input type="file" class="axf" accept="image/*,application/pdf,.pdf,.xml">' : ''}</div>`);
+    if ($('.axver', box)) $('.axver', box).onclick = () => abrirAnexo(cfg.anexo.bucket, row.anexo_caminho, row.anexo_nome).catch(erro);
+  }
   const bt = [];
   if (canW && row && cfg.del !== false) bt.push({ t: 'Excluir', c: 'er', f: async () => { await q(sb.from(cfg.table).delete().eq(pk, row[pk])); toast('Excluído'); await depois(); } }, '|');
   if (canW) bt.push({ t: 'Salvar', c: 'pri', f: async () => {
     const v = lerCampos(box, campos);
     if (cfg.antesSalvar) cfg.antesSalvar(v, row);
+    let id = row ? row[pk] : null;
     if (row) await q(sb.from(cfg.table).update(v).eq(pk, row[pk]));
-    else await q(sb.from(cfg.table).insert(cfg.semObra ? v : { ...v, obra_id: S.obra.id }));
+    else id = (await q(sb.from(cfg.table).insert(cfg.semObra ? v : { ...v, obra_id: S.obra.id }).select(pk).single()))[pk];
+    const fa = cfg.anexo && $('.axf', box) && $('.axf', box).files[0];
+    if (fa) await subirAnexo(cfg.anexo.bucket, cfg.table, id, fa, v.obra_id || S.obra.id);
     toast('Salvo', 'ok'); S.ref = {}; await depois();
   } });
   modal((row ? (canW ? 'Editar' : 'Ver') : 'Novo') + ' – ' + cfg.title, box, bt);
+}
+/* comprovantes / anexos de registros */
+async function subirAnexo(bucket, tabela, id, file, obraId) {
+  let blob = file, ext = (file.name.split('.').pop() || 'bin').toLowerCase(), tipo = file.type || undefined;
+  if (/^image\//.test(file.type) && !/gif|svg/.test(file.type)) {
+    const u = await new Promise(ok => { const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.readAsDataURL(file); });
+    const im = await reduzImg(u, 1800); if (im) { blob = await (await fetch(im.url)).blob(); ext = 'jpg'; tipo = 'image/jpeg'; }
+  }
+  const cam = `${obraId || S.obra.id}/${tabela}/${id}_${Date.now()}.${ext}`;
+  await q(sb.storage.from(bucket).upload(cam, blob, { upsert: true, contentType: tipo }));
+  await q(sb.from(tabela).update({ anexo_caminho: cam, anexo_nome: file.name }).eq('id', id));
+  return cam;
+}
+async function abrirAnexo(bucket, caminho, nome) {
+  const u = await q(sb.storage.from(bucket).createSignedUrl(caminho, 600));
+  const a = document.createElement('a'); a.href = u.signedUrl; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
 }
 function abas(el, lista, ini) {
   el.innerHTML = `<div class="tabs">${lista.map((a, i) => `<button data-i="${i}">${h(a.t)}</button>`).join('')}</div><div class="tabc"></div>`;
@@ -545,9 +633,10 @@ const MODS = [
   { id: 'custos', t: 'Custos', g: 'Gestão', i: 'coin', p: PODE.custos, f: () => pgCustos },
   { id: 'suprimentos', t: 'Suprimentos', g: 'Gestão', i: 'package', p: ['admin', 'gestor', 'auxiliar', 'apontador', 'almoxarife'], f: () => pgSupr },
   { id: 'relatorios', t: 'Relatórios', g: 'Gestão', i: 'file-export', p: null, f: () => pgRelatorios },
+  { id: 'pendinfo', t: 'Informações pendentes', g: 'Gestão', i: 'list-check', p: ['admin', 'gestor', 'auxiliar'], f: () => pgInfoPend },
   { id: 'usuarios', t: 'Usuários e acesso', g: 'Gestão', i: 'shield-lock', p: ['admin'], f: () => pgUsuarios }
 ];
-const SUBT = { painel: 'Avanço, contrato, produção e alertas da obra', obras: 'Ficha, pendências, documentos SEPLAN, aditivos e certidões', rdo: 'Registro diário: clima, efetivo, equipamentos, serviços, ocorrências e fotos', producaomes: 'Memória de cálculo diária e quadro de produção do mês por item', producao: 'Massa aplicada × tickets da usina e taxa de ligante', equipamentos: 'Frota, abastecimento, manutenções e horas', maodeobra: 'Efetivo, ASO, EPI e histograma', orcamento: 'Itens contratados, executado, medido e saldo', planejamento: 'EAP, cronograma e histograma previsto', medicao: 'Boletim, memória de cálculo e checklist da fiscalização', custos: 'Custo real × valor executado', suprimentos: 'Estoque, pedidos e entradas no canteiro', relatorios: 'Documentos no padrão NIEMAIA para a fiscalização e a diretoria', usuarios: 'Perfis, acesso por obra e registro de alterações' };
+const SUBT = { painel: 'Avanço, contrato, produção e alertas da obra', obras: 'Ficha, pendências, documentos SEPLAN, aditivos e certidões', rdo: 'Registro diário: clima, efetivo, equipamentos, serviços, ocorrências e fotos', producaomes: 'Memória de cálculo diária e quadro de produção do mês por item', producao: 'Massa aplicada × tickets da usina e taxa de ligante', equipamentos: 'Frota, abastecimento, manutenções e horas', maodeobra: 'Efetivo, ASO, EPI e histograma', orcamento: 'Itens contratados, executado, medido e saldo', planejamento: 'EAP, cronograma e histograma previsto', medicao: 'Boletim, memória de cálculo e checklist da fiscalização', custos: 'Custo real, alimentação, alojamento e transporte, com comprovantes', pendinfo: 'O que falta no sistema e a quem pedir', suprimentos: 'Estoque, pedidos e entradas no canteiro', relatorios: 'Documentos no padrão NIEMAIA para a fiscalização e a diretoria', usuarios: 'Perfis, acesso por obra e registro de alterações' };
 
 async function iniciar() {
   const { data: { session } } = await sb.auth.getSession();
@@ -581,12 +670,15 @@ function estrutura() {
   <div class="obra"><span class="cod">${h(S.obra.codigo)}</span><select id="selObra" aria-label="Obra">${S.obras.map(o => `<option value="${o.id}" ${o.id === S.obra.id ? 'selected' : ''}>${h(o.codigo)} – ${h(o.nome)}</option>`).join('')}</select><span class="st">${badge(S.obra.status, L.status_obra)}</span></div>
   <span class="sp"></span><div class="user"><div class="av">${h(ini)}</div><div class="nm">${h(S.me.nome || S.me.email)}<small>${h(L.perfil[S.perfil] || '')}</small></div></div>
   <button id="btSenha" title="Alterar senha" aria-label="Alterar senha"><i class="ti ti-key"></i></button><button id="btSair" title="Sair"><i class="ti ti-logout"></i>Sair</button></header>
-  <div id="pend"></div><main class="cont" id="cont"></main></div></div>`;
+  <div id="pend"></div><main class="cont" id="cont"></main></div><div class="scrim"></div>
+  <nav class="bnav" aria-label="Atalhos">${['painel', 'rdo', 'producaomes', 'equipamentos', 'custos', 'pendinfo', 'orcamento', 'medicao'].map(id => mods.find(m => m.id === id)).filter(Boolean).slice(0, 4).map(m => `<a href="#${m.id}" data-id="${m.id}"><i class="ti ti-${m.i}"></i>${h({ painel: 'Painel', rdo: 'RDO', producaomes: 'Produção', equipamentos: 'Equipam.', custos: 'Custos', pendinfo: 'Pendências', orcamento: 'Orçamento', medicao: 'Medição' }[m.id])}</a>`).join('')}<button class="bmenu" aria-label="Todos os módulos"><i class="ti ti-menu-2"></i>Menu</button></nav></div>`;
   $('#selObra').onchange = e => trocarObra(e.target.value).catch(erro);
   $('#btSair').onclick = () => sb.auth.signOut();
   $('#btSenha').onclick = trocarSenha;
   $('.menu-btn').onclick = () => $('.side').classList.toggle('on');
   $('.side').onclick = e => { if (e.target.closest('a')) $('.side').classList.remove('on'); };
+  $('.scrim').onclick = () => $('.side').classList.remove('on');
+  $('.bmenu').onclick = () => $('.side').classList.add('on');
   mostrarPendentes();
 }
 async function rotear() {
@@ -594,7 +686,7 @@ async function rotear() {
   let m = MODS.find(x => x.id === id && (!x.p || x.p.includes(S.perfil)));
   if (!m) m = MODS[0];
   S.rota = m.id;
-  $$('.side a').forEach(a => a.classList.toggle('at', a.dataset.id === m.id));
+  $$('.side a, .bnav a').forEach(a => a.classList.toggle('at', a.dataset.id === m.id)); window.scrollTo(0, 0);
   S.charts.forEach(c => c.destroy()); S.charts = [];
   const cont = $('#cont'); cont.innerHTML = `<div class="pghead"><div class="t"><h1>${h(m.t)}</h1><p>${h(SUBT[m.id] || '')} · ${h(S.obra.codigo)} – ${h(S.obra.nome)}</p></div></div><div id="pg"><div class="vazio">Carregando…</div></div>`;
   const el = $('#pg');
@@ -1182,9 +1274,12 @@ async function pgMaoObra(el) {
 /* ================= CUSTOS ================= */
 async function pgCustos(el) {
   abas(el, [
-    { t: 'Lançamentos', f: c => crud(c, { table: 'custos', title: 'Custos da obra', doc: 'CUSTOS', order: 'data', asc: false, write: 'custos', paisagem: true,
+    { t: 'Lançamentos', f: c => crud(c, { table: 'custos', title: 'Custos da obra', doc: 'CUSTOS', order: 'data', asc: false, write: 'custos', paisagem: true, anexo: { bucket: 'comprovantes' },
       cols: [{ k: 'data', l: 'Data', t: 'date', req: true, def: hoje() }, { k: 'categoria', l: 'Categoria', t: 'sel', o: L.categoria, req: true }, { k: 'orcamento_item_id', l: 'Item do orçamento', t: 'ref', ref: 'item', w: 'w2' }, { k: 'descricao', l: 'Descrição', req: true, w: 'w2' },
-        { k: 'fornecedor', l: 'Fornecedor' }, { k: 'documento', l: 'NF / recibo' }, { k: 'quantidade', l: 'Qtd', t: 'num' }, { k: 'unidade', l: 'Un' }, { k: 'valor', l: 'Valor (R$)', t: 'money', req: true, sum: true }, { k: 'observacao', l: 'Observação', t: 'area', w: 'wf', formOnly: true }] }) },
+        { k: 'fornecedor', l: 'Fornecedor' }, { k: 'documento', l: 'NF / recibo' }, { k: 'quantidade', l: 'Qtd', t: 'num' }, { k: 'unidade', l: 'Un' }, { k: 'valor', l: 'Valor (R$)', t: 'money', req: true, sum: true }, { k: 'cmp', l: 'Comprov.', listOnly: true, html: true, noExp: true, v: r => r.anexo_caminho ? '<i class="ti ti-paperclip" title="Comprovante anexado"></i>' : '' }, { k: 'observacao', l: 'Observação', t: 'area', w: 'wf', formOnly: true }] }) },
+    { t: 'Alimentação, alojamento e transporte', f: apoioLanc },
+    { t: 'Importar comprovantes', f: apoioImportar },
+    { t: 'Resumo do apoio', f: apoioResumo },
     { t: 'Custo × executado', f: async c => {
       const [cs, it] = await Promise.all([q(sb.from('custos').select('*').eq('obra_id', S.obra.id)), q(sb.from('vw_itens_saldo').select('*').eq('obra_id', S.obra.id).order('ordem'))]);
       const cat = Object.keys(L.categoria).map(k => [L.categoria[k], soma(cs.filter(x => x.categoria === k), x => x.valor)]).filter(x => x[1]);
@@ -1999,6 +2094,267 @@ async function importarAvancos(c) {
       catch (x) { erro(x); bt.disabled = false; }
     };
   } catch (x) { erro(x); } };
+}
+
+/* ================= CUSTOS DE APOIO: ALIMENTAÇÃO, ALOJAMENTO E TRANSPORTE ================= */
+const SUB_APOIO = {
+  alimentacao: ['Café da manhã', 'Almoço', 'Jantar', 'Marmita / quentinha', 'Lanche', 'Água mineral', 'Gás de cozinha', 'Mercado do alojamento'],
+  alojamento: ['Aluguel de casa', 'Hotel / pousada', 'Energia', 'Água', 'Internet', 'Limpeza / lavanderia', 'Móveis e utensílios', 'Manutenção do alojamento'],
+  transporte: ['Combustível – veículo leve', 'Passagem', 'Translado de equipe', 'Frete', 'Pedágio', 'Manutenção de veículo', 'Aluguel de veículo', 'Uber / mototáxi']
+};
+const GRP_APOIO = Object.keys(SUB_APOIO);
+const colsApoio = () => [
+  { k: 'data', l: 'Data', t: 'date', req: true, def: hoje() },
+  { k: 'categoria', l: 'Grupo', t: 'sel', o: L.apoio, req: true, def: 'alimentacao' },
+  { k: 'subcategoria', l: 'Tipo', list: [...new Set(Object.values(SUB_APOIO).flat())] },
+  { k: 'descricao', l: 'Descrição', req: true, w: 'w2' },
+  { k: 'fornecedor', l: 'Fornecedor' },
+  { k: 'pessoas', l: 'Pessoas', t: 'num', d: 0, dica: 'Quantidade de pessoas atendidas (refeições, vagas, passageiros)' },
+  { k: 'periodo_fim', l: 'Período até', t: 'date', formOnly: true, dica: 'Alojamento/aluguel: fim do período pago' },
+  { k: 'veiculo', l: 'Veículo / placa', formOnly: true },
+  { k: 'quantidade', l: 'Qtd', t: 'num', formOnly: true }, { k: 'unidade', l: 'Un', formOnly: true, list: ['refeição', 'diária', 'mês', 'l', 'km', 'viagem', 'un'] },
+  { k: 'valor', l: 'Valor (R$)', t: 'money', req: true, sum: true },
+  { k: 'forma_pagamento', l: 'Pagamento', t: 'sel', o: L.pagamento },
+  { k: 'pago_por', l: 'Pago por', formOnly: true, dica: 'Empresa ou nome do colaborador (reembolso)' },
+  { k: 'documento', l: 'Nº NF / recibo' },
+  { k: 'cmp', l: 'Comprovante', listOnly: true, html: true, noExp: true, v: r => r.anexo_caminho ? '<span class="badge b-ok"><i class="ti ti-paperclip"></i>Anexado</span>' : '<span class="badge b-av">Falta</span>' },
+  { k: 'observacao', l: 'Observação', t: 'area', w: 'wf', formOnly: true }
+];
+const mesAtual = () => hoje().slice(0, 7);
+async function apoioLanc(c) {
+  let grp = '', mes = mesAtual();
+  const meses = []; { const d = new Date(); for (let i = 0; i < 12; i++) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); meses.push(x.toISOString().slice(0, 7)); } }
+  const cfg = { table: 'custos', title: 'Alimentação, alojamento e transporte', doc: 'APOIO', order: 'data', asc: false, write: 'custos', paisagem: true, novo: 'Novo lançamento',
+    anexo: { bucket: 'comprovantes' }, cols: colsApoio(), vazio: 'Nenhum lançamento no período.',
+    load: () => { let p = sb.from('custos').select('*').eq('obra_id', S.obra.id).in('categoria', grp ? [grp] : GRP_APOIO); if (mes) { const [y, m] = mes.split('-').map(Number); p = p.gte('data', mes + '-01').lt('data', new Date(y, m, 1).toISOString().slice(0, 10)); } return q(p.order('data', { ascending: false })); },
+    botoes: `<select class="fGrp" aria-label="Grupo" style="width:auto"><option value="">Todos os grupos</option>${Object.entries(L.apoio).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
+      <select class="fMes" aria-label="Mês" style="width:auto"><option value="">Todos os meses</option>${meses.map(m => `<option value="${m}" ${m === mes ? 'selected' : ''}>${m.slice(5)}/${m.slice(0, 4)}</option>`).join('')}</select>
+      <button class="zip"><i class="ti ti-file-zip"></i>Comprovantes (ZIP)</button>`,
+    resumo: (box, r) => { const t = g => soma(r.filter(x => x.categoria === g), x => x.valor); const sem = r.filter(x => !x.anexo_caminho);
+      box.innerHTML = `<div class="kpis k4">${GRP_APOIO.map(g => `<div class="kpi"><span>${L.apoio[g]}</span><b>${brl(t(g))}</b><small>${r.filter(x => x.categoria === g).length} lançamento(s)</small></div>`).join('')}<div class="kpi ${sem.length ? 'alerta' : ''}"><span>Sem comprovante</span><b>${sem.length}</b><small>${brl(soma(sem, x => x.valor))}</small></div></div>`; },
+    pronto: (el, rec, rows) => {
+      $('.fGrp', el).onchange = e => { grp = e.target.value; rec(); };
+      $('.fMes', el).onchange = e => { mes = e.target.value; rec(); };
+      $('.zip', el).onclick = () => zipComprovantes(rows(), `${S.obra.codigo}_COMPROVANTES_${mes || 'TODOS'}${grp ? '_' + grp.toUpperCase() : ''}`).catch(erro);
+    }
+  };
+  await crud(c, cfg);
+}
+async function zipComprovantes(rows, nome) {
+  const com = rows.filter(r => r.anexo_caminho);
+  if (!com.length) return toast('Nenhum comprovante anexado nesta seleção.', 'erro');
+  toast(`Baixando ${com.length} comprovante(s)…`);
+  const zip = new JSZip(); const idx = [['Arquivo', 'Data', 'Grupo', 'Tipo', 'Descrição', 'Fornecedor', 'Documento', 'Pagamento', 'Valor (R$)']];
+  for (const [i, r] of com.entries()) {
+    const u = await q(sb.storage.from('comprovantes').createSignedUrl(r.anexo_caminho, 600));
+    const b = await (await fetch(u.signedUrl)).blob(); const ext = r.anexo_caminho.split('.').pop();
+    const arq = `${String(i + 1).padStart(3, '0')}_${r.data}_${semAcento(L.categoria[r.categoria] || r.categoria).replace(/\W+/g, '')}_${semAcento(r.fornecedor || r.descricao).replace(/\W+/g, '_').slice(0, 30)}_R$${num(r.valor).toFixed(2).replace('.', ',')}.${ext}`;
+    zip.file(arq, b); idx.push([arq, dt(r.data), L.categoria[r.categoria], r.subcategoria || '', r.descricao, r.fornecedor || '', r.documento || '', L.pagamento[r.forma_pagamento] || '', num(r.valor).toFixed(2).replace('.', ',')]);
+  }
+  zip.file('INDICE.csv', '\ufeff' + idx.map(l => l.map(x => `"${String(x).replace(/"/g, '""')}"`).join(';')).join('\r\n'));
+  const blob = await zip.generateAsync({ type: 'blob' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome + '.zip'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function apoioResumo(c) {
+  const ini = new Date(); ini.setMonth(ini.getMonth() - 5); const d0 = ini.toISOString().slice(0, 7) + '-01';
+  const [cs, ef] = await Promise.all([
+    q(sb.from('custos').select('data,categoria,subcategoria,valor,pessoas,anexo_caminho').eq('obra_id', S.obra.id).in('categoria', GRP_APOIO).gte('data', d0)),
+    q(sb.from('rdo_efetivo').select('quantidade,rdo!inner(data)').eq('obra_id', S.obra.id).gte('rdo.data', d0))]);
+  const meses = [...new Set([...cs.map(x => x.data.slice(0, 7)), ...ef.map(x => x.rdo.data.slice(0, 7))])].sort();
+  const hd = m => soma(ef.filter(x => x.rdo.data.startsWith(m)), x => x.quantidade);
+  const vg = (m, g) => soma(cs.filter(x => x.data.startsWith(m) && (!g || x.categoria === g)), x => x.valor);
+  const H = ['Mês', 'Homens-dia (RDO)', 'Alimentação', 'Alojamento', 'Transporte', 'Total', 'Alimentação / homem-dia', 'Total / homem-dia'];
+  const L1 = meses.map(m => { const h_ = hd(m), t = vg(m); return [`${m.slice(5)}/${m.slice(0, 4)}`, h_, vg(m, 'alimentacao'), vg(m, 'alojamento'), vg(m, 'transporte'), t, h_ ? vg(m, 'alimentacao') / h_ : null, h_ ? t / h_ : null]; });
+  const sub = {}; cs.forEach(x => { const k = `${L.apoio[x.categoria]} – ${x.subcategoria || 'Sem tipo'}`; sub[k] = (sub[k] || 0) + num(x.valor); });
+  const subL = Object.entries(sub).sort((a, b) => b[1] - a[1]);
+  c.innerHTML = `<div class="card"><div class="bar"><h3 style="margin:0">Custo de apoio por mês (últimos 6 meses)</h3><span class="sp"></span><button id="arX">Excel</button></div>
+  <div class="tw"><table class="grid"><thead><tr>${H.map((x, i) => `<th class="${i ? 'n' : ''}">${x}</th>`).join('')}</tr></thead><tbody>${L1.map(r => `<tr><td>${r[0]}</td><td class="n">${nf(r[1], 0)}</td>${r.slice(2, 6).map(v => `<td class="n">${brl(v)}</td>`).join('')}<td class="n">${r[6] == null ? '–' : brl(r[6])}</td><td class="n">${r[7] == null ? '–' : brl(r[7])}</td></tr>`).join('') || `<tr><td colspan="8" class="vazio">Sem lançamentos.</td></tr>`}</tbody></table></div>
+  <p class="muted">Homens-dia = soma do efetivo dos RDOs do mês. Serve para comparar o custo de apoio com o tamanho da equipe.</p></div>
+  <div class="card"><h3 style="margin-top:0">Por tipo de despesa</h3><div class="tw"><table class="grid">${subL.map(([k, v]) => `<tr><td>${h(k)}</td><td class="n">${brl(v)}</td></tr>`).join('') || '<tr><td class="vazio">Sem lançamentos.</td></tr>'}</table></div></div>`;
+  $('#arX').onclick = () => xlsxExport('APOIO_RESUMO', 'Custo de apoio por mês', H, L1, { fmt: [null, '#,##0', '"R$" #,##0.00', '"R$" #,##0.00', '"R$" #,##0.00', '"R$" #,##0.00', '"R$" #,##0.00', '"R$" #,##0.00'] });
+}
+/* importação em lote: fotos/PDF dos comprovantes + dados (manual ou JSON do Claude) */
+async function apoioImportar(c) {
+  if (!pode('custos')) { c.innerHTML = '<div class="vazio">Seu perfil não lança custos.</div>'; return; }
+  let linhas = [];
+  c.innerHTML = `<div class="g2"><div class="card"><h3 style="margin-top:0">1. Comprovantes</h3><p class="muted">Fotos de recibos, cupons, notas fiscais (PDF ou XML) ou comprovantes de PIX. Um lançamento por arquivo.</p>
+    <div class="bar"><label class="btf"><i class="ti ti-files"></i>Escolher arquivos<input type="file" id="cpArq" accept="image/*,application/pdf,.pdf,.xml" multiple hidden></label>
+    <label class="btf"><i class="ti ti-camera"></i>Tirar foto<input type="file" id="cpCam" accept="image/*" capture="environment" hidden></label></div></div>
+    <div class="card"><h3 style="margin-top:0">2. Dados lidos pelo Claude (opcional)</h3><p class="muted">Mande as fotos numa conversa do Claude e peça "dados dos comprovantes em JSON para o sistema". Cole aqui: o sistema casa cada linha com o arquivo pelo nome.</p>
+    <textarea id="cpJson" placeholder='[{"arquivo":"IMG_0012.jpg","data":"2026-11-23","categoria":"alimentacao","subcategoria":"Almoço","descricao":"Almoço equipe","fornecedor":"Restaurante X","documento":"123","valor":180,"pessoas":12,"forma_pagamento":"pix"}]' style="min-height:90px;font-family:monospace;font-size:12px"></textarea>
+    <div class="bar" style="margin-top:8px"><button id="cpAplic"><i class="ti ti-wand"></i>Aplicar dados</button></div></div></div>
+    <div class="card"><div class="bar"><h3 style="margin:0">3. Conferir e salvar</h3><span class="sp"></span><button class="pri" id="cpSal" disabled><i class="ti ti-device-floppy"></i>Salvar</button></div><div id="cpLista"><div class="vazio">Escolha os arquivos.</div></div></div>`;
+  const dataDoNome = f => { const m = f.name.match(/(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`; const d = new Date(f.lastModified); return isNaN(d) ? hoje() : d.toISOString().slice(0, 10); };
+  const desenhar = () => {
+    $('#cpSal').disabled = !linhas.length; $('#cpSal').innerHTML = `<i class="ti ti-device-floppy"></i>Salvar ${linhas.length} lançamento(s)`;
+    $('#cpLista').innerHTML = linhas.length ? `<div class="cpl">${linhas.map((l, i) => `<div class="cpi" data-i="${i}"><div class="cpt">${l.url ? `<img src="${l.url}" alt="">` : '<i class="ti ti-file-type-pdf"></i>'}<small>${h(l.file.name)}</small><button class="lk cpX" title="Remover"><i class="ti ti-x"></i>Remover</button></div>
+      <div class="form">${[['data', 'Data', 'date'], ['categoria', 'Grupo', 'sel'], ['subcategoria', 'Tipo'], ['descricao', 'Descrição'], ['fornecedor', 'Fornecedor'], ['documento', 'Nº NF / recibo'], ['valor', 'Valor (R$)', 'num'], ['pessoas', 'Pessoas', 'num'], ['forma_pagamento', 'Pagamento', 'pag']].map(([k, lb, t]) => `<div><label>${lb}</label>${t === 'sel' ? `<select data-k="${k}">${Object.entries(L.apoio).map(([a, b]) => `<option value="${a}" ${l[k] === a ? 'selected' : ''}>${b}</option>`).join('')}</select>` : t === 'pag' ? `<select data-k="${k}"><option value=""></option>${Object.entries(L.pagamento).map(([a, b]) => `<option value="${a}" ${l[k] === a ? 'selected' : ''}>${b}</option>`).join('')}</select>` : `<input data-k="${k}" type="${t === 'date' ? 'date' : t === 'num' ? 'number' : 'text'}" ${t === 'num' ? 'step="any" inputmode="decimal"' : ''} value="${h(l[k] ?? '')}" ${k === 'subcategoria' ? `list="dlSub"` : ''}>`}</div>`).join('')}</div></div>`).join('')}</div><datalist id="dlSub">${Object.values(SUB_APOIO).flat().map(x => `<option value="${h(x)}">`).join('')}</datalist>` : '<div class="vazio">Escolha os arquivos.</div>';
+  };
+  $('#cpLista').addEventListener('input', e => { const i = e.target.closest('.cpi')?.dataset.i, k = e.target.dataset.k; if (i == null || !k) return; linhas[i][k] = e.target.value; });
+  $('#cpLista').addEventListener('click', e => { if (!e.target.closest('.cpX')) return; linhas.splice(+e.target.closest('.cpi').dataset.i, 1); desenhar(); });
+  const add = async fs => { for (const f of fs) { let url = null; if (/^image\//.test(f.type)) { const u = await new Promise(ok => { const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.readAsDataURL(f); }); const im = await reduzImg(u, 360); url = im && im.url; } linhas.push({ file: f, url, data: dataDoNome(f), categoria: 'alimentacao' }); } desenhar(); };
+  $('#cpArq').onchange = e => add([...e.target.files]).catch(erro);
+  $('#cpCam').onchange = e => add([...e.target.files]).catch(erro);
+  $('#cpAplic').onclick = () => { try {
+    let j = JSON.parse($('#cpJson').value.trim().replace(/^```(json)?|```$/g, '')); if (!Array.isArray(j)) j = j.comprovantes || [j];
+    let n = 0; j.forEach((x, k) => { const a = semAcento(x.arquivo || ''); const l = linhas.find(l => a && (semAcento(l.file.name) === a || semAcento(l.file.name).includes(a) || a.includes(semAcento(l.file.name)))) || (j.length === linhas.length ? linhas[k] : null); if (!l) return; n++;
+      const cat = semAcento(x.categoria || x.grupo || ''); l.categoria = cat.startsWith('aloj') ? 'alojamento' : cat.startsWith('trans') ? 'transporte' : 'alimentacao';
+      ['subcategoria', 'descricao', 'fornecedor', 'documento', 'pago_por', 'observacao'].forEach(k2 => { if (x[k2] != null) l[k2] = String(x[k2]); });
+      if (x.data) l.data = normData(x.data); if (x.valor != null) l.valor = nOuNulo(typeof x.valor === 'number' ? x.valor : String(x.valor).replace(/[^\d,.]/g, '')); if (x.pessoas != null) l.pessoas = x.pessoas;
+      const fp = semAcento(x.forma_pagamento || ''); l.forma_pagamento = Object.keys(L.pagamento).find(p => fp && (p === fp || semAcento(L.pagamento[p]).startsWith(fp))) || l.forma_pagamento; });
+    desenhar(); toast(`${n} comprovante(s) preenchido(s)`, n ? 'ok' : 'erro'); } catch (x) { erro(new Error('JSON inválido: ' + x.message)); } };
+  $('#cpSal').onclick = async () => {
+    const bt = $('#cpSal'); bt.disabled = true; let ok = 0; const falhas = [];
+    for (const l of [...linhas]) {
+      try {
+        if (!l.data || !l.descricao || nOuNulo(l.valor) == null) throw new Error('preencha data, descrição e valor');
+        const r = await q(sb.from('custos').insert({ obra_id: S.obra.id, data: l.data, categoria: l.categoria, subcategoria: l.subcategoria || null, descricao: l.descricao, fornecedor: l.fornecedor || null, documento: l.documento || null, valor: Number(String(l.valor).replace(',', '.')), pessoas: l.pessoas ? Math.round(Number(l.pessoas)) : null, forma_pagamento: l.forma_pagamento || null, pago_por: l.pago_por || null, observacao: l.observacao || null }).select('id').single());
+        await subirAnexo('comprovantes', 'custos', r.id, l.file); ok++; linhas.splice(linhas.indexOf(l), 1);
+      } catch (x) { falhas.push(`${l.file.name}: ${x.message}`); }
+    }
+    desenhar(); toast(`${ok} lançamento(s) salvo(s)`, falhas.length ? 'erro' : 'ok');
+    if (falhas.length) $('#cpLista').insertAdjacentHTML('afterbegin', `<p style="color:var(--er)">${falhas.map(h).join('<br>')}</p>`);
+  };
+}
+
+/* ================= INFORMAÇÕES PENDENTES ================= */
+const AREA_INFO = {
+  contrato: ['Contrato e ordem de serviço', 'Gestor do contrato'],
+  documentos: ['Documentos de início (SEPLAN)', 'Escritório / gestor do contrato'],
+  orcamento: ['Orçamento', 'Gestor do contrato / orçamentos'],
+  planejamento: ['Planejamento e cronograma', 'Gestor do contrato'],
+  projeto: ['Projeto e fiscalização', 'Prefeitura – SEPLAN (fiscalização)'],
+  frota: ['Equipamentos', 'Encarregado de equipamentos / oficina'],
+  maodeobra: ['Mão de obra, ASO e EPI', 'RH / segurança do trabalho'],
+  rdo: ['Diário de obra', 'Apontador / encarregado de campo'],
+  aprovacao: ['Aprovações', 'Gestor do contrato'],
+  custos: ['Custos e comprovantes', 'Financeiro / quem pagou'],
+  medicao: ['Documentos da medição', 'Financeiro / contabilidade'],
+  certidoes: ['Certidões', 'Financeiro / contabilidade'],
+  outros: ['Outros', 'A definir']
+};
+L.area_info = Object.fromEntries(Object.entries(AREA_INFO).map(([k, v]) => [k, v[0]]));
+const PRIO = { 1: ['Alta', 'b-er'], 2: ['Média', 'b-av'], 3: ['Baixa', ''] };
+async function levantarPendencias(obras) {
+  const ids = obras.map(o => o.id); const hj = hoje(), em15 = addDias(hj, 15), ha15 = addDias(hj, -15);
+  const pegar = async (t, sel, f) => { try { let p = sb.from(t).select(sel).in('obra_id', ids); if (f) p = f(p); return await q(p.limit(10000)); } catch (e) { return []; } };
+  const [docs, itens, eap, eqs, eqc, func, rdos, custos, medd, pend, ctt, cert] = await Promise.all([
+    pegar('documentos_obra', 'id,obra_id,documento,status', p => p.in('status', ['pendente', 'em_andamento'])),
+    pegar('orcamento_itens', 'id,obra_id,preco_unitario,ativo'), pegar('eap_atividades', 'id,obra_id'),
+    pegar('equipamentos', 'id,obra_id,prefixo,descricao,horimetro_atual,observacao,status'), pegar('equipamentos_custo', 'equipamento_id,obra_id,custo_hora'),
+    pegar('funcionarios', 'id,obra_id,nome,aso_validade,epi_entregue,ativo'),
+    pegar('rdo', 'id,obra_id,data,status', p => p.gte('data', addDias(hj, -60))),
+    pegar('custos', 'id,obra_id,data,categoria,descricao,valor,anexo_caminho', p => p.is('anexo_caminho', null)),
+    pegar('medicao_documentos', 'id,obra_id,documento,entregue,medicao:medicoes(numero,status)', p => p.eq('entregue', false)),
+    pegar('pendencias', '*', p => p.in('status', ['aberta', 'em_andamento', 'a_confirmar']).neq('tipo', 'informado')),
+    q(sb.from('contatos').select('*')).catch(() => []), q(sb.from('certidoes').select('*')).catch(() => [])]);
+  const it = [];
+  const add = (o, area, chave, info, detalhe, prio, link, quem) => it.push({ obra: o, area, chave, info, detalhe: detalhe || '', prio, link, quem });
+  for (const o of obras) {
+    const por = arr => arr.filter(x => x.obra_id === o.id);
+    [['contrato_numero', 'Nº do contrato', 1], ['data_os', 'Data da Ordem de Serviço', 1], ['prazo_dias', 'Prazo contratual (dias)', 1], ['valor_contrato', 'Valor do contrato', 1], ['data_inicio', 'Data de início da obra', 2], ['data_fim_prevista', 'Término previsto', 2], ['contratante', 'Contratante', 2]]
+      .forEach(([k, l, p]) => { if (o[k] == null || o[k] === '') add(o, 'contrato', `obra.${k}`, l, 'Cadastro da obra em branco', p, 'obras'); });
+    por(docs).forEach(d => add(o, 'documentos', `doc.${d.id}`, d.documento, L.status_doc[d.status] || d.status, 2, 'obras'));
+    const its = por(itens).filter(i => i.ativo !== false);
+    if (!its.length) add(o, 'orcamento', 'orc.vazio', 'Planilha orçamentária vencedora (Excel)', 'Sem orçamento carregado: medição e memória de cálculo não funcionam', 1, 'orcamento');
+    else { const sp = its.filter(i => i.preco_unitario == null).length; if (sp) add(o, 'orcamento', 'orc.preco', `Preço unitário de ${sp} item(ns)`, 'Itens sem preço na planilha', 2, 'orcamento'); }
+    if (!por(eap).length) add(o, 'planejamento', 'eap.vazio', 'Cronograma físico (EAP e prazos por frente)', 'Sem planejamento: curva S e histograma previsto ficam vazios', 2, 'planejamento');
+    const e = por(eqs);
+    if (!e.length) add(o, 'frota', 'frota.vazio', 'Relação da frota com prefixo, placa e propriedade', 'Sem equipamentos cadastrados: RDO e abastecimento não lançam máquinas', 1, 'equipamentos');
+    else {
+      const prov = e.filter(x => /provis/i.test(x.observacao || '')); if (prov.length) add(o, 'frota', 'frota.prov', `Prefixo real de ${prov.length} equipamento(s)`, prov.map(x => x.prefixo).join(', '), 2, 'equipamentos');
+      const ch = new Set(por(eqc).filter(x => x.custo_hora != null).map(x => x.equipamento_id)); const sc = e.filter(x => !ch.has(x.id)); if (sc.length) add(o, 'frota', 'frota.custo', `Custo horário de ${sc.length} equipamento(s)`, 'Próprio: custo/h; locado: valor do contrato de locação e franquia', 3, 'equipamentos', 'Gestor do contrato');
+      const sh = e.filter(x => x.horimetro_atual == null); if (sh.length) add(o, 'frota', 'frota.hor', `Horímetro atual de ${sh.length} equipamento(s)`, sh.slice(0, 8).map(x => x.prefixo).join(', ') + (sh.length > 8 ? '…' : ''), 3, 'equipamentos');
+    }
+    const fu = por(func).filter(x => x.ativo !== false);
+    if (!fu.length) add(o, 'maodeobra', 'func.vazio', 'Relação de funcionários (nome, função, admissão, ASO)', 'Exigida em toda medição', 1, 'maodeobra');
+    else { const aso = fu.filter(x => !x.aso_validade || x.aso_validade < em15); if (aso.length) add(o, 'maodeobra', 'func.aso', `ASO vencido, a vencer ou sem data: ${aso.length}`, aso.slice(0, 6).map(x => x.nome).join(', ') + (aso.length > 6 ? '…' : ''), 1, 'maodeobra');
+      const epi = fu.filter(x => !x.epi_entregue); if (epi.length) add(o, 'maodeobra', 'func.epi', `Ficha de EPI de ${epi.length} funcionário(s)`, 'Trabalhador sem EPI é afastado pela fiscalização', 1, 'maodeobra'); }
+    const rd = por(rdos); const temRdo = new Set(rd.map(x => x.data));
+    if (o.status !== 'planejamento' || rd.length) { const ini = [o.data_inicio, rd.map(x => x.data).sort()[0]].filter(Boolean).sort()[0]; const falta = []; for (let d = ha15; d < hj; d = addDias(d, 1)) { if (ini && d < ini) continue; if (!ini) continue; if (new Date(d + 'T12:00').getDay() === 0) continue; if (!temRdo.has(d)) falta.push(d); }
+      if (falta.length) add(o, 'rdo', 'rdo.falta', `RDO de ${falta.length} dia(s) (últimos 15 dias)`, falta.map(d => dt(d).slice(0, 5)).join(', '), 1, 'rdo'); }
+    const env = rd.filter(x => x.status === 'enviado'); if (env.length) add(o, 'aprovacao', 'rdo.aprov', `Aprovação de ${env.length} RDO(s)`, env.map(x => dt(x.data).slice(0, 5)).join(', '), 2, 'rdo');
+    const sc = por(custos); if (sc.length) add(o, 'custos', 'custo.comp', `Comprovante de ${sc.length} lançamento(s) de custo`, `${brl(soma(sc, x => x.valor))} sem nota/recibo anexado`, 2, 'custos');
+    por(medd).filter(x => !x.medicao || x.medicao.status !== 'aprovada').forEach(x => add(o, 'medicao', `med.${x.id}`, x.documento, `Medição nº ${x.medicao ? x.medicao.numero : '?'}`, 1, 'medicao'));
+    por(pend).filter(p => !p.chave).forEach(p => it.push({ obra: o, area: p.area || (p.tipo === 'divergencia' ? 'projeto' : 'outros'), chave: null, pid: p.id, info: p.descricao, detalhe: [p.impacto, p.frente, p.documento].filter(Boolean).join(' · '), prio: p.prazo && p.prazo <= em15 ? 1 : 2, link: 'obras', quem: p.responsavel, solicitado: p.solicitado_em, prazo: p.prazo }));
+  }
+  /* certidões: da empresa, valem para todas as obras */
+  const o0 = obras.find(o => o.id === S.obra.id) || obras[0];
+  const TIPOS_CERT = ['CRF (FGTS)', 'INSS / Federal', 'Municipal', 'Trabalhista (CNDT)', 'Estadual'];
+  if (!cert.length) add(o0, 'certidoes', 'cert.vazio', 'Certidões negativas da empresa', TIPOS_CERT.join(', '), 1, 'obras');
+  else cert.filter(c => !c.validade || c.validade < em15).forEach(c => add(o0, 'certidoes', `cert.${c.id}`, `Certidão ${c.tipo}`, c.validade ? (c.validade < hj ? 'Vencida em ' : 'Vence em ') + dt(c.validade) : 'Sem validade', 1, 'obras'));
+  /* rastreio: pendências automáticas já solicitadas */
+  const rastro = Object.fromEntries(pend.filter(p => p.chave).map(p => [p.obra_id + '|' + p.chave, p]));
+  it.forEach(x => { if (x.chave) { const r = rastro[x.obra.id + '|' + x.chave]; if (r) { x.solicitado = r.solicitado_em; x.pid = r.id; } } });
+  /* quem pedir: contato cadastrado da área (da obra ou geral) > responsável informado > padrão */
+  it.forEach(x => { const c = ctt.find(c => c.area === x.area && c.obra_id === x.obra.id) || ctt.find(c => c.area === x.area && !c.obra_id);
+    x.contato = c || null; x.quem = c ? c.nome : (x.quem || (x.area === 'contrato' || x.area === 'aprovacao' || x.area === 'planejamento' ? (x.obra.gestor_contrato || AREA_INFO[x.area][1]) : AREA_INFO[x.area][1])); });
+  /* fecha o rastreio do que já foi resolvido */
+  const vivas = new Set(it.filter(x => x.chave).map(x => x.obra.id + '|' + x.chave));
+  const resolvidas = pend.filter(p => p.chave && !vivas.has(p.obra_id + '|' + p.chave));
+  if (resolvidas.length && pode('custos')) sb.from('pendencias').update({ status: 'resolvida' }).in('id', resolvidas.map(p => p.id)).then(() => {});
+  return it.sort((a, b) => a.prio - b.prio || a.obra.codigo.localeCompare(b.obra.codigo));
+}
+function saudacao() { const hh = new Date().getHours(); return hh < 12 ? 'Bom dia' : hh < 18 ? 'Boa tarde' : 'Boa noite'; }
+function msgWhats(quem, its) {
+  const pn = String(quem).replace(/^(eng|dr|sr|sra)\.?\s+/i, '').split(/[\s/]/)[0];
+  const obras = [...new Set(its.map(x => x.obra.codigo))];
+  return `${saudacao()}${/^[A-ZÁÉÍÓÚ][a-záéíóúãõç]+$/.test(pn) ? ', ' + pn : ''}! Tudo bem?\nPra deixar o controle ${obras.length > 1 ? 'das obras' : 'da obra ' + obras[0]} em dia, preciso de:\n${its.map(x => `• ${obras.length > 1 ? `[${x.obra.codigo}] ` : ''}${x.info}${x.detalhe && x.detalhe.length < 70 ? ` (${x.detalhe})` : ''}`).join('\n')}\nConsegue me mandar quando puder? Obrigado!`;
+}
+function msgEmail(quem, its) {
+  const obras = [...new Set(its.map(x => x.obra.codigo))];
+  const assunto = `Solicitação de informações – ${obras.length > 1 ? 'Obras ' + obras.join(', ') : 'Obra ' + obras[0] + ' – ' + its[0].obra.nome} – NIEMAIA`;
+  const corpo = `Prezado(a) ${quem},\n\nSolicitamos, por gentileza, o envio das informações abaixo, necessárias para a atualização do controle ${obras.length > 1 ? 'das obras' : 'da obra'} e da documentação junto à fiscalização:\n\n${its.map((x, i) => `${i + 1}. ${obras.length > 1 ? `[${x.obra.codigo}] ` : ''}${x.info}${x.detalhe ? ' – ' + x.detalhe : ''}`).join('\n')}\n\nFicamos à disposição para qualquer esclarecimento.\n\nAtenciosamente,\n${S.me.nome || ''}\n${S.me.cargo || 'NIEMAIA Construções Ltda.'}`;
+  return { assunto, corpo };
+}
+async function pgInfoPend(el) {
+  abas(el, [{ t: 'Lista para solicitar', f: infoLista }, { t: 'Contatos (a quem pedir)', f: infoContatos }]);
+}
+async function infoLista(c) {
+  let escopo = 'todas', area = '', busca = '', soAbertas = true; let it = [];
+  c.innerHTML = `<div class="bar"><select id="ipEsc" style="width:auto" aria-label="Obras"><option value="todas">Todas as obras</option><option value="atual">Só ${h(S.obra.codigo)}</option></select>
+    <select id="ipArea" style="width:auto" aria-label="Área"><option value="">Todas as áreas</option>${Object.entries(L.area_info).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
+    <input class="busca" id="ipBus" placeholder="Buscar" aria-label="Buscar"><label class="chk" style="width:auto"><input type="checkbox" id="ipAb" checked><span>Ocultar já solicitadas</span></label>
+    <span class="sp"></span><button id="ipX">Excel</button><button id="ipP">PDF</button></div><div id="ipK"></div><div id="ipL"><div class="vazio">Levantando…</div></div>`;
+  const filt = () => it.filter(x => (escopo === 'todas' || x.obra.id === S.obra.id) && (!area || x.area === area) && (!soAbertas || !x.solicitado) && (!busca || semAcento([x.info, x.detalhe, x.quem, x.obra.codigo].join(' ')).includes(semAcento(busca))));
+  const desenhar = () => {
+    const r = filt(); const grupos = {}; r.forEach(x => (grupos[x.quem] = grupos[x.quem] || []).push(x));
+    $('#ipK').innerHTML = `<div class="kpis k4"><div class="kpi"><span>Informações pendentes</span><b>${r.length}</b></div><div class="kpi ${r.some(x => x.prio === 1) ? 'alerta' : ''}"><span>Prioridade alta</span><b>${r.filter(x => x.prio === 1).length}</b></div><div class="kpi"><span>Pessoas a acionar</span><b>${Object.keys(grupos).length}</b></div><div class="kpi"><span>Já solicitadas</span><b>${it.filter(x => x.solicitado && (escopo === 'todas' || x.obra.id === S.obra.id)).length}</b></div></div>`;
+    $('#ipL').innerHTML = Object.keys(grupos).length ? Object.entries(grupos).sort((a, b) => Math.min(...a[1].map(x => x.prio)) - Math.min(...b[1].map(x => x.prio)) || b[1].length - a[1].length).map(([quem, xs], gi) => { const ct = xs.find(x => x.contato)?.contato;
+      return `<div class="card ipg" data-g="${gi}"><div class="bar"><div><h3 style="margin:0">${h(quem)}</h3><small class="muted">${ct ? [ct.cargo, ct.empresa, ct.telefone, ct.email].filter(Boolean).map(h).join(' · ') : 'Sem contato cadastrado (aba Contatos)'}</small></div><span class="sp"></span>
+      <button class="ipW"><i class="ti ti-brand-whatsapp"></i>WhatsApp</button><button class="ipE"><i class="ti ti-mail"></i>E-mail</button><button class="ipC"><i class="ti ti-copy"></i>Copiar</button>${pode('custos') ? '<button class="ipS"><i class="ti ti-check"></i>Marcar solicitado</button>' : ''}</div>
+      <div class="tw"><table class="grid lst"><thead><tr><th>Obra</th><th>Área</th><th>Informação</th><th>Detalhe</th><th>Prioridade</th><th>Situação</th><th></th></tr></thead><tbody>${xs.map(x => `<tr><td data-l="Obra"><b>${h(x.obra.codigo)}</b></td><td data-l="Área">${h(L.area_info[x.area] || x.area)}</td><td data-l="Informação">${h(x.info)}</td><td data-l="Detalhe" class="muted">${h(x.detalhe)}</td><td data-l="Prioridade"><span class="badge ${PRIO[x.prio][1]}">${PRIO[x.prio][0]}</span></td><td data-l="Situação">${x.solicitado ? `<span class="badge b-ok">Solicitado ${dt(x.solicitado).slice(0, 5)}</span>` : '<span class="badge">A solicitar</span>'}${x.prazo ? ` <small class="muted">prazo ${dt(x.prazo)}</small>` : ''}</td><td><a href="#${x.link}" class="lk" title="Abrir módulo"><i class="ti ti-arrow-right"></i></a></td></tr>`).join('')}</tbody></table></div></div>`; }).join('') : '<div class="vazio">Nada pendente com esses filtros. 👍</div>';
+    const gs = Object.entries(grupos).sort((a, b) => Math.min(...a[1].map(x => x.prio)) - Math.min(...b[1].map(x => x.prio)) || b[1].length - a[1].length);
+    $$('.ipg', c).forEach(card => { const [quem, xs] = gs[card.dataset.g]; const ct = xs.find(x => x.contato)?.contato;
+      $('.ipW', card).onclick = () => { const tel = String(ct && ct.telefone || '').replace(/\D/g, ''); window.open(`https://wa.me/${tel ? (tel.length <= 11 ? '55' + tel : tel) : ''}?text=${encodeURIComponent(msgWhats(quem, xs))}`, '_blank', 'noopener'); };
+      $('.ipE', card).onclick = () => { const m = msgEmail(quem, xs); location.href = `mailto:${encodeURIComponent(ct && ct.email || '')}?subject=${encodeURIComponent(m.assunto)}&body=${encodeURIComponent(m.corpo)}`; };
+      $('.ipC', card).onclick = async () => { try { await navigator.clipboard.writeText(msgWhats(quem, xs)); toast('Mensagem copiada', 'ok'); } catch (e) { modal('Mensagem', `<textarea style="min-height:220px">${h(msgWhats(quem, xs))}</textarea>`); } };
+      if ($('.ipS', card)) $('.ipS', card).onclick = () => marcar(xs).catch(erro); });
+  };
+  const marcar = async xs => {
+    for (const x of xs) {
+      if (x.pid) await q(sb.from('pendencias').update({ solicitado_em: hoje(), status: 'em_andamento', responsavel: x.quem }).eq('id', x.pid));
+      else { const r = await q(sb.from('pendencias').insert({ obra_id: x.obra.id, chave: x.chave, tipo: 'pendencia', area: x.area, descricao: x.info + (x.detalhe ? ' – ' + x.detalhe : ''), responsavel: x.quem, solicitado_em: hoje(), status: 'em_andamento' }).select('id').single()); x.pid = r.id; }
+      x.solicitado = hoje();
+    }
+    toast(`${xs.length} item(ns) marcado(s) como solicitado(s)`, 'ok'); desenhar();
+  };
+  const exp = tipo => { const r = filt(); const H = ['Obra', 'Área', 'Informação', 'Detalhe', 'Solicitar a', 'Prioridade', 'Situação'];
+    const B = r.map(x => [x.obra.codigo, L.area_info[x.area] || x.area, x.info, x.detalhe, x.quem, PRIO[x.prio][0], x.solicitado ? 'Solicitado em ' + dt(x.solicitado) : 'A solicitar']);
+    tipo === 'x' ? xlsxExport('INFO_PENDENTES', 'Informações pendentes', H, B) : tabelaPdf('INFO_PENDENTES', 'Informações pendentes – a solicitar', H, B, { paisagem: true }); };
+  $('#ipEsc').onchange = e => { escopo = e.target.value; desenhar(); };
+  $('#ipArea').onchange = e => { area = e.target.value; desenhar(); };
+  $('#ipBus').oninput = e => { busca = e.target.value; desenhar(); };
+  $('#ipAb').onchange = e => { soAbertas = e.target.checked; desenhar(); };
+  $('#ipX').onclick = () => exp('x'); $('#ipP').onclick = () => exp('p');
+  it = await levantarPendencias(S.obras); desenhar();
+}
+async function infoContatos(c) {
+  const oo = Object.fromEntries(S.obras.map(o => [o.id, o.codigo]));
+  await crud(c, { table: 'contatos', title: 'Contatos – a quem pedir cada informação', doc: 'CONTATOS', semObra: true, write: 'custos', novo: 'Novo contato', order: 'area',
+    intro: 'Cadastre quem responde por cada área. Sem obra = vale para todas. A lista de pendências usa esse contato para montar o WhatsApp e o e-mail.',
+    load: () => q(sb.from('contatos').select('*').order('area').order('nome')),
+    cols: [{ k: 'area', l: 'Área', t: 'sel', o: L.area_info, req: true }, { k: 'nome', l: 'Nome', req: true }, { k: 'cargo', l: 'Cargo / função' }, { k: 'empresa', l: 'Empresa / setor' },
+      { k: 'telefone', l: 'WhatsApp', dica: 'Com DDD, ex.: 83 99999-9999' }, { k: 'email', l: 'E-mail', t: 'email' }, { k: 'obra_id', l: 'Obra', t: 'sel', o: oo, dica: 'Em branco = todas as obras', v: r => r.obra_id ? oo[r.obra_id] : 'Todas' }, { k: 'observacao', l: 'Observação', t: 'area', w: 'wf', formOnly: true }] });
 }
 
 </script>
