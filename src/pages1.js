@@ -130,9 +130,9 @@ function curvaS(D, K) {
   const pEap = pts.map(x => x === hoje() ? K.fisEap : null);
   grafico($('#cS'), {
     type: 'line', data: { labels: pts.map(dt), datasets: [
-      { label: 'Planejado (EAP)', data: prev, borderColor: '#57585A', borderDash: [5, 4], pointRadius: 0, tension: .25 },
-      { label: 'Executado (itens do orçamento)', data: real, borderColor: '#EE5A1B', backgroundColor: '#EE5A1B', pointRadius: 0, tension: .25, spanGaps: true },
-      { label: 'Realizado EAP (hoje)', data: pEap, borderColor: '#1d5fa8', backgroundColor: '#1d5fa8', pointRadius: 6, showLine: false }
+      { label: 'Planejado (EAP)', data: prev, borderColor: cor('--sec'), borderDash: [5, 4], pointRadius: 0, tension: .25 },
+      { label: 'Executado (itens do orçamento)', data: real, borderColor: cor('--lar'), backgroundColor: cor('--lar'), pointRadius: 0, tension: .25, spanGaps: true },
+      { label: 'Realizado EAP (hoje)', data: pEap, borderColor: cor('--az'), backgroundColor: cor('--az'), pointRadius: 6, showLine: false }
     ] }, options: { maintainAspectRatio: false, scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } }, plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${nf(c.parsed.y, 1)}%` } } } }
   });
   $('#cSm').textContent = 'Planejado: distribuição linear das atividades da EAP entre início e fim previstos. Executado: memória de cálculo diária e produção de CBUQ sobre o contratado.';
@@ -147,8 +147,8 @@ function histograma(D, cid) {
   const lab = []; for (let d = datas[0]; d <= datas[datas.length - 1]; d = addDias(d, 1)) lab.push(d);
   grafico($('#' + cid), {
     data: { labels: lab.map(dt), datasets: [
-      { type: 'bar', label: 'Efetivo real (RDO)', data: lab.map(d => porDia[d] ?? null), backgroundColor: '#EE5A1B' },
-      { type: 'line', label: 'Previsto', data: lab.map(d => prevMes[d.slice(0, 7)] ?? null), borderColor: '#57585A', borderDash: [5, 4], pointRadius: 0, stepped: true }
+      { type: 'bar', label: 'Efetivo real (RDO)', data: lab.map(d => porDia[d] ?? null), backgroundColor: cor('--lar') },
+      { type: 'line', label: 'Previsto', data: lab.map(d => prevMes[d.slice(0, 7)] ?? null), borderColor: cor('--sec'), borderDash: [5, 4], pointRadius: 0, stepped: true }
     ] }, options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: 'pessoas' } } } }
   });
 }

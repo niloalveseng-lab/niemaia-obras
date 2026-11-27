@@ -352,6 +352,17 @@ async function formCrud(cfg, row, depois, canW) {
   modal((row ? (canW ? 'Editar' : 'Ver') : 'Novo') + ' – ' + cfg.title, box, bt);
 }
 /* dias (seg–sáb, até ontem) sem RDO nos últimos DIAS_RDO dias, a partir do início da obra ou do 1º RDO; regra única do painel e das pendências */
+/* tema claro/escuro: escolha salva no aparelho; sem escolha, segue o sistema */
+function temaAtual() { try { return localStorage.getItem('niemaia_tema'); } catch (e) { return null; } }
+const logoTema = () => document.documentElement.dataset.tema === 'escuro' ? LOGO_ESC : LOGO;
+function aplicarTema(t) {
+  const escuro = t ? t === 'escuro' : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.tema = escuro ? 'escuro' : 'claro';
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = escuro ? '#1A1B1F' : '#FFFFFF';
+  document.querySelectorAll('img.logo').forEach(i => { i.src = logoTema(); });
+  const b = document.getElementById('btTema'); if (b) { b.innerHTML = `<i class="ti ti-${escuro ? 'sun' : 'moon'}" aria-hidden="true"></i>`; b.setAttribute('aria-label', escuro ? 'Usar tema claro' : 'Usar tema escuro'); b.title = b.getAttribute('aria-label'); }
+}
+aplicarTema(temaAtual());
 const DIAS_RDO = 15;
 /* categorias que podem ser lançadas à mão (combustível vem só dos abastecimentos) */
 const CAT_LANC = Object.fromEntries(Object.entries(L.categoria).filter(([k]) => k !== 'combustivel'));
@@ -367,9 +378,11 @@ function barra(v, prev) {
   return `<div class="kbar" role="presentation"><i style="width:${w}%"></i>${p !== null ? `<em style="left:${p}%" title="previsto"></em>` : ''}</div>`;
 }
 /* gráficos: se a biblioteca não carregar (sem sinal), mostra aviso e o resto da tela segue funcionando */
+const cor = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 function grafico(canvas, cfg) {
   if (!canvas) return null;
-  if (!window.Chart) { const p = canvas.parentNode; if (p) p.innerHTML = '<p class="muted">Gráfico indisponível: a biblioteca de gráficos não carregou (verifique a conexão e recarregue).</p>'; return null; }
+  if (window.Chart) { Chart.defaults.color = cor('--sec'); Chart.defaults.borderColor = cor('--lin2'); Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; }
+  if (!window.Chart) { const p = canvas.parentNode; if (p) p.style.height = 'auto'; if (p) p.innerHTML = '<p class="muted">Gráfico indisponível: a biblioteca de gráficos não carregou (verifique a conexão e recarregue).</p>'; return null; }
   const ch = new Chart(canvas, cfg); S.charts.push(ch); return ch;
 }
 /* comprovantes / anexos de registros */
@@ -399,7 +412,7 @@ function abas(el, lista, ini) {
 function telaLogin(modo = 'entrar') {
   document.body.className = '';
   $('#app').innerHTML = `<div class="login"><div class="lado"><h2>Gestão de obras de infraestrutura</h2><p>Diário de obra, produção, medição, equipamentos e custos num só lugar, com o padrão NIEMAIA em cada documento.</p><div class="tags">${S.obras.length ? '' : '<span>RUAS</span><span>ALÇA OESTE</span><span>POLO TURÍSTICO</span>'}</div></div>
-  <div class="frm"><form class="box"><img src="${LOGO}" alt="NIEMAIA Serviços e Equipamentos"><h1>${modo === 'criar' ? 'Criar conta' : modo === 'senha' ? 'Recuperar senha' : 'Entrar'}</h1><p class="muted" style="margin-top:2px">${modo === 'senha' ? 'Enviaremos um link para cadastrar a nova senha.' : 'Use seu e-mail e senha cadastrados.'}</p>
+  <div class="frm"><form class="box"><img class="logo" src="${logoTema()}" alt="NIEMAIA Serviços e Equipamentos"><h1>${modo === 'criar' ? 'Criar conta' : modo === 'senha' ? 'Recuperar senha' : 'Entrar'}</h1><p class="muted" style="margin-top:2px">${modo === 'senha' ? 'Enviaremos um link para cadastrar a nova senha.' : 'Use seu e-mail e senha cadastrados.'}</p>
   ${modo === 'criar' ? '<div><label for="ln">Nome completo</label><input id="ln" required autocomplete="name"></div>' : ''}
   <div><label for="le">E-mail</label><input id="le" type="email" required autocomplete="email"></div>
   ${modo !== 'senha' ? `<div><label for="ls">Senha</label><input id="ls" type="password" required minlength="6" autocomplete="${modo === 'criar' ? 'new-password' : 'current-password'}"></div>` : ''}
@@ -443,9 +456,9 @@ async function iniciar() {
   if (!session) return telaLogin();
   S.user = session.user;
   S.me = await q(sb.from('perfis').select('*').eq('id', S.user.id).single());
-  if (!S.me.ativo) { $('#app').innerHTML = `<div class="login"><div class="simples" style="grid-column:1/-1"><div class="card" style="max-width:420px"><img src="${LOGO}" alt="" style="width:120px"><h2>Acesso bloqueado</h2><p>Fale com o administrador do sistema.</p><button class="sair">Sair</button></div></div></div>`; $('.sair').onclick = () => sb.auth.signOut(); return; }
+  if (!S.me.ativo) { $('#app').innerHTML = `<div class="login"><div class="simples" style="grid-column:1/-1"><div class="card" style="max-width:420px"><img class="logo" src="${logoTema()}" alt="" style="width:120px"><h2>Acesso bloqueado</h2><p>Fale com o administrador do sistema.</p><button class="sair">Sair</button></div></div></div>`; $('.sair').onclick = () => sb.auth.signOut(); return; }
   S.obras = await q(sb.from('obras').select('*').order('codigo'));
-  if (!S.obras.length) { $('#app').innerHTML = `<div class="login"><div class="simples" style="grid-column:1/-1"><div class="card" style="max-width:440px"><img src="${LOGO}" alt="" style="width:120px"><h2>Nenhuma obra liberada</h2><p><b>${h(S.me.nome)}</b>, sua conta está ativa. Peça ao administrador para liberar seu acesso em "Usuários e acesso".</p><button class="sair">Sair</button></div></div></div>`; $('.sair').onclick = () => sb.auth.signOut(); return; }
+  if (!S.obras.length) { $('#app').innerHTML = `<div class="login"><div class="simples" style="grid-column:1/-1"><div class="card" style="max-width:440px"><img class="logo" src="${logoTema()}" alt="" style="width:120px"><h2>Nenhuma obra liberada</h2><p><b>${h(S.me.nome)}</b>, sua conta está ativa. Peça ao administrador para liberar seu acesso em "Usuários e acesso".</p><button class="sair">Sair</button></div></div></div>`; $('.sair').onclick = () => sb.auth.signOut(); return; }
   let ult = null; try { ult = localStorage.getItem('niemaia_obra'); } catch (e) { }
   await trocarObra((S.obras.find(o => o.id === ult) || S.obras[0]).id, true);
   estrutura();
@@ -463,19 +476,24 @@ function estrutura() {
   const mods = MODS.filter(m => !m.p || m.p.includes(S.perfil));
   const grupos = [...new Set(mods.map(m => m.g))];
   const ini = (S.me.nome || S.me.email || '?').split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
-  $('#app').innerHTML = `<div class="app"><aside class="side"><div class="marca"><img src="${LOGO}" alt="NIEMAIA Serviços e Equipamentos"><small>Gestão de obras</small></div>
-  <nav aria-label="Módulos">${grupos.map(g => `<div class="grp">${h(g)}</div>` + mods.filter(m => m.g === g).map(m => `<a href="#${m.id}" data-id="${m.id}"><i class="ti ti-${m.i}" aria-hidden="true"></i>${h(m.t)}</a>`).join('')).join('')}</nav>
-  <div class="rod">NIEMAIA Construções · Sousa/PB</div></aside>
-  <div class="main"><header class="top"><button class="menu-btn" aria-label="Menu"><i class="ti ti-menu-2"></i></button>
+  $('#app').innerHTML = `<div class="app"><aside class="side"><div class="marca"><img class="logo" src="${logoTema()}" alt="NIEMAIA Serviços e Equipamentos"><small>Gestão de obras</small></div>
+  <nav aria-label="Módulos">${grupos.map(g => `<div class="grp">${h(g)}</div>` + mods.filter(m => m.g === g).map(m => `<a href="#${m.id}" data-id="${m.id}" title="${h(m.t)}"><i class="ti ti-${m.i}" aria-hidden="true"></i><span>${h(m.t)}</span></a>`).join('')).join('')}</nav>
+  <div class="rod"><div class="rod-acoes"><button class="rTema"><i class="ti ti-contrast-2" aria-hidden="true"></i>Tema claro/escuro</button><button class="rSenha"><i class="ti ti-key" aria-hidden="true"></i>Alterar senha</button></div>NIEMAIA Construções · Sousa/PB</div></aside>
+  <div class="main"><header class="top"><button class="menu-btn ic" aria-label="Recolher ou abrir o menu" title="Menu"><i class="ti ti-layout-sidebar" aria-hidden="true"></i></button>
   <div class="obra"><span class="cod">${h(S.obra.codigo)}</span><select id="selObra" aria-label="Obra">${S.obras.map(o => `<option value="${o.id}" ${o.id === S.obra.id ? 'selected' : ''}>${h(o.codigo)} – ${h(o.nome)}</option>`).join('')}</select><span class="st">${badge(S.obra.status, L.status_obra)}</span></div>
   <span class="sp"></span><div class="user"><div class="av">${h(ini)}</div><div class="nm">${h(S.me.nome || S.me.email)}<small>${h(L.perfil[S.perfil] || '')}</small></div></div>
-  <button id="btSenha" title="Alterar senha" aria-label="Alterar senha"><i class="ti ti-key"></i></button><button id="btSair" title="Sair"><i class="ti ti-logout"></i>Sair</button></header>
+  <button id="btTema" class="ic"></button><button id="btSenha" class="ic" title="Alterar senha" aria-label="Alterar senha"><i class="ti ti-key" aria-hidden="true"></i></button><button id="btSair" title="Sair"><i class="ti ti-logout"></i>Sair</button></header>
   <div id="pend"></div><main class="cont" id="cont"></main></div><div class="scrim"></div>
   <nav class="bnav" aria-label="Atalhos">${['painel', 'rdo', 'producaomes', 'equipamentos', 'custos', 'pendinfo', 'orcamento', 'medicao'].map(id => mods.find(m => m.id === id)).filter(Boolean).slice(0, 4).map(m => `<a href="#${m.id}" data-id="${m.id}"><i class="ti ti-${m.i}"></i>${h({ painel: 'Painel', rdo: 'RDO', producaomes: 'Produção', equipamentos: 'Equipam.', custos: 'Custos', pendinfo: 'Pendências', orcamento: 'Orçamento', medicao: 'Medição' }[m.id])}</a>`).join('')}<button class="bmenu" aria-label="Todos os módulos"><i class="ti ti-menu-2"></i>Menu</button></nav></div>`;
   $('#selObra').onchange = e => trocarObra(e.target.value).catch(erro);
   $('#btSair').onclick = () => sb.auth.signOut();
   $('#btSenha').onclick = trocarSenha;
-  $('.menu-btn').onclick = () => $('.side').classList.toggle('on');
+  const celular = () => matchMedia('(max-width:900px)').matches;
+  try { if (localStorage.getItem('niemaia_menu') === 'mini') $('.app').classList.add('mini'); } catch (e) { }
+  $('.menu-btn').onclick = () => { if (celular()) return $('.side').classList.toggle('on'); const mini = $('.app').classList.toggle('mini'); try { localStorage.setItem('niemaia_menu', mini ? 'mini' : ''); } catch (e) { } };
+  aplicarTema(temaAtual());
+  $('.rSenha').onclick = trocarSenha; $('.rTema').onclick = () => $('#btTema').click();
+  $('#btTema').onclick = () => { const novo = document.documentElement.dataset.tema === 'escuro' ? 'claro' : 'escuro'; try { localStorage.setItem('niemaia_tema', novo); } catch (e) { } aplicarTema(novo); if (S.charts.length) rotear(); };
   $('.side').onclick = e => { if (e.target.closest('a')) $('.side').classList.remove('on'); };
   $('.scrim').onclick = () => $('.side').classList.remove('on');
   $('.bmenu').onclick = () => $('.side').classList.add('on');

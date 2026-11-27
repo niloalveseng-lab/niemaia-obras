@@ -164,7 +164,7 @@ async function importarRdo(c) {
         ok++;
       } catch (x) { falhas.push(`${dt(p.data)}: ${x.message}`); }
     }
-    $('#iPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:${falhas.length ? '#F1C4BE' : '#BFE3CF'}"><h3>${ok} RDO(s) importado(s)${mem ? ` · ${mem} linha(s) na memória de cálculo` : ''}${nf_ ? ` · ${nf_} foto(s)` : ''}</h3>${falhas.length ? `<p style="color:var(--er)">${falhas.map(h).join('<br>')}</p>` : '<p class="muted">Confira em Diários e, se for o caso, aprove.</p>'}</div>`);
+    $('#iPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:${falhas.length ? 'var(--er-borda)' : 'var(--ok)'}"><h3>${ok} RDO(s) importado(s)${mem ? ` · ${mem} linha(s) na memória de cálculo` : ''}${nf_ ? ` · ${nf_} foto(s)` : ''}</h3>${falhas.length ? `<p style="color:var(--er)">${falhas.map(h).join('<br>')}</p>` : '<p class="muted">Confira em Diários e, se for o caso, aprove.</p>'}</div>`);
     toast(`${ok} RDO(s) importado(s)`, falhas.length ? 'erro' : 'ok');
   };
 }
@@ -257,7 +257,7 @@ async function importarAvancos(c) {
     $('#avGo').onclick = async () => {
       const bt = $('#avGo'); bt.disabled = true;
       const rows = plano.filter(p => p.acao === 'importar').map(p => ({ origem: 'ficha', obra_id: S.obra.id, data: p.data, orcamento_item_id: p.it.id, local: p.local, est_ini_int: p.l.est_ini_int, est_ini_frac: p.l.est_ini_frac, est_fim_int: p.l.est_fim_int, est_fim_frac: p.l.est_fim_frac, lado: p.l.lado, comprimento: p.comp ?? null, largura: p.l.largura, espessura: p.l.espessura, n_viagens: p.l.n_viagens, cap_viagem: p.l.cap_viagem, quantidade: p.qtd, formula: p.formula, camada: p.camada, observacao: p.obs }));
-      try { for (let i = 0; i < rows.length; i += 200) await q(sb.from('memoria_calculo').insert(rows.slice(i, i + 200))); toast(`${rows.length} avanço(s) lançado(s) na memória de cálculo`, 'ok'); $('#avPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:#BFE3CF"><h3>${rows.length} linha(s) importada(s)</h3><p class="muted">Confira no Quadro do mês e na Memória de cálculo diária.</p></div>`); }
+      try { for (let i = 0; i < rows.length; i += 200) await q(sb.from('memoria_calculo').insert(rows.slice(i, i + 200))); toast(`${rows.length} avanço(s) lançado(s) na memória de cálculo`, 'ok'); $('#avPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:var(--ok)"><h3>${rows.length} linha(s) importada(s)</h3><p class="muted">Confira no Quadro do mês e na Memória de cálculo diária.</p></div>`); }
       catch (x) { erro(x); bt.disabled = false; }
     };
   } catch (x) { erro(x); } };
