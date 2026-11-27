@@ -93,11 +93,12 @@ async function pgPainel(el) {
   const al = alertas(D, K);
   const sub = (v, x) => v === null || v === undefined ? '–' : x;
   el.innerHTML = `<p class="muted" style="margin:-10px 0 14px">${h(o.contratante || 'Contratante a preencher')}${K.termino ? ' · término previsto ' + dt(K.termino) : ''}</p>
-  <div class="kpis">
+  <div class="kpis hero">
    <div class="kpi"><span>% físico</span><b>${pct(K.fisItens)}</b>${barra(K.fisItens, K.prevHoje)}<small>${!D.itens.length ? 'sem orçamento carregado' : K.prevHoje !== null ? 'previsto hoje (cronograma): ' + pct(K.prevHoje) : 'cronograma sem datas previstas'}</small></div>
    <div class="kpi"><span>% financeiro</span><b>${pct(K.finPct)}</b>${barra(K.finPct)}<small>medido aprovado ${brl(K.medAprov)}</small></div>
    <div class="kpi"><span>Prazo</span><b>${K.prazoDias ? `${K.decorridos} de ${K.prazoDias} dias` : 'a preencher'}</b>${K.prazoDias ? barra(K.prazoPct) : ''}<small>${K.prazoDias ? pct(K.prazoPct) + ' do prazo' + (K.termino ? ' · fim ' + dt(K.termino) : '') : 'informe data de início/OS e prazo em Obras'}</small></div>
    <div class="kpi"><span>Saldo do contrato</span><b>${sub(K.saldo, brl(K.saldo))}</b><small>contrato ${K.valorContr ? brl(K.valorContr) : '–'}${K.aditivo ? ' (aditivos ' + brl(K.aditivo) + ')' : ''}</small></div>
+  </div><div class="kpis">
    ${K.cbuqContr ? `<div class="kpi"><span>CBUQ aplicado (área × 0,05 × 2,40)</span><b>${nf(K.cbuqT, 1)} t</b><small>de ${nf(K.cbuqContr, 1)} t (${pct(100 * K.cbuqT / K.cbuqContr)}) · balança ${nf(K.balT, 1)} t</small></div>` : ''}
    ${pode('custos') ? `<div class="kpi"><span>Custo real</span><b>${brl(K.custo)}</b><small>lançado ${brl(K.custoLanc)} · máquinas ${brl(K.custoEq)} · diesel ${brl(K.custoDiesel)}${K.temPreco && K.execValor ? ' · margem ' + pct(100 * (K.execValor - K.custo) / K.execValor) : ''}</small></div>` : ''}
    <div class="kpi"><span>Efetivo no último RDO</span><b>${K.ultDia ? K.porDia[K.ultDia] : '–'}</b><small>${K.ultDia ? dt(K.ultDia) : 'sem RDO'}</small></div>

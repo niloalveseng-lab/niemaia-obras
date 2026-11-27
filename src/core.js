@@ -76,7 +76,11 @@ const PODE = {
 };
 const pode = k => PODE[k].includes(S.perfil);
 
-function toast(t, tipo = '') { const d = document.createElement('div'); d.className = tipo; d.textContent = t; $('#toast').appendChild(d); setTimeout(() => d.remove(), tipo === 'erro' ? 9000 : 4000); }
+function toast(t, tipo = '') {
+  const d = document.createElement('div'); d.className = tipo; d.textContent = t; d.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
+  const sair = () => { if (d.classList.contains('sai')) return; d.classList.add('sai'); setTimeout(() => d.remove(), 200); };
+  d.onclick = sair; $('#toast').appendChild(d); setTimeout(sair, tipo === 'erro' ? 9000 : 4000);
+}
 function erro(e) {
   if (e && e.cancelado) return;
   console.error(e);
@@ -92,7 +96,9 @@ function modal(titulo, corpo, botoes = []) {
   o.innerHTML = `<div class="mdl" role="dialog" aria-label="${h(titulo)}"><h2 style="margin-top:0">${h(titulo)}</h2><div class="mb"></div><div class="acts"></div></div>`;
   const mb = $('.mb', o); if (typeof corpo === 'string') mb.innerHTML = corpo; else mb.appendChild(corpo);
   const acts = $('.acts', o);
-  const fechar = () => o.remove();
+  const fechar = () => { if (o.classList.contains('saindo')) return; o.classList.add('saindo'); document.removeEventListener('keydown', esc); setTimeout(() => o.remove(), 160); };
+  const esc = ev => { if (ev.key === 'Escape' && o === $$('.ovl').pop()) fechar(); };
+  document.addEventListener('keydown', esc);
   botoes.forEach(b => {
     if (b === '|') { const s = document.createElement('span'); s.className = 'sp'; acts.appendChild(s); return; }
     const x = document.createElement('button'); x.textContent = b.t; if (b.c) x.className = b.c;
@@ -102,6 +108,7 @@ function modal(titulo, corpo, botoes = []) {
   const c = document.createElement('button'); c.textContent = 'Fechar'; c.onclick = fechar; acts.appendChild(c);
   o.addEventListener('mousedown', ev => { if (ev.target === o) fechar(); });
   document.body.appendChild(o);
+  const f1 = $('input:not([type=hidden]):not([readonly]),select,textarea', $('.mb', o)); if (f1 && !matchMedia('(pointer: coarse)').matches) setTimeout(() => f1.focus({ preventScroll: true }), 60);
   const f = $('input,select,textarea', mb); if (f) f.focus();
   return o;
 }
@@ -402,8 +409,10 @@ async function abrirAnexo(bucket, caminho, nome) {
   const a = document.createElement('a'); a.href = u.signedUrl; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
 }
 function abas(el, lista, ini) {
-  el.innerHTML = `<div class="tabs">${lista.map((a, i) => `<button data-i="${i}">${h(a.t)}</button>`).join('')}</div><div class="tabc"></div>`;
-  const ir = async i => { S.nav++; $$('.tabs button', el).forEach(b => b.classList.toggle('at', b.dataset.i == i)); const c = $('.tabc', el); c.innerHTML = '<div class="vazio">Carregando…</div>'; try { await lista[i].f(c); } catch (e) { if (e && e.cancelado) return; erro(e); c.innerHTML = '<div class="vazio">Não foi possível carregar. <button class="lk" onclick="rotear()">Tentar de novo</button></div>'; } };
+  el.innerHTML = `<div class="tabs" role="tablist">${lista.map((a, i) => `<button data-i="${i}" role="tab">${h(a.t)}</button>`).join('')}<i class="tabs-ind" aria-hidden="true"></i></div><div class="tabc"></div>`;
+  const ind = $('.tabs-ind', el); let primeira = true;
+  const marcar = b => { if (!b) return; if (primeira) { ind.style.transition = 'none'; } ind.style.transform = `translateX(${b.offsetLeft}px) scaleX(${b.offsetWidth})`; if (primeira) { void ind.offsetWidth; ind.style.transition = ''; primeira = false; } b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); };
+  const ir = async i => { S.nav++; $$('.tabs button', el).forEach(b => { b.classList.toggle('at', b.dataset.i == i); b.setAttribute('aria-selected', b.dataset.i == i); }); requestAnimationFrame(() => marcar($(`.tabs button[data-i="${i}"]`, el))); const c = $('.tabc', el); c.innerHTML = '<div class="vazio">Carregando…</div>'; try { await lista[i].f(c); } catch (e) { if (e && e.cancelado) return; erro(e); c.innerHTML = '<div class="vazio">Não foi possível carregar. <button class="lk" onclick="rotear()">Tentar de novo</button></div>'; } };
   $('.tabs', el).onclick = e => { const b = e.target.closest('button'); if (b) ir(+b.dataset.i); };
   ir(ini || 0);
 }
@@ -560,7 +569,7 @@ function estrutura() {
   const mods = MODS.filter(m => !m.p || m.p.includes(S.perfil));
   const grupos = [...new Set(mods.map(m => m.g))];
   const ini = (S.me.nome || S.me.email || '?').split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
-  $('#app').innerHTML = `<div class="app"><aside class="side"><div class="marca"><img class="logo" src="${logoTema()}" alt="NIEMAIA Serviços e Equipamentos"><small>Gestão de obras</small></div>
+  $('#app').innerHTML = `<div class="app"><aside class="side"><div class="side-canto" aria-hidden="true"><b></b></div><div class="marca"><img src="${LOGO_ESC}" alt="NIEMAIA Serviços e Equipamentos"><small>Gestão de obras</small></div>
   <nav aria-label="Módulos">${grupos.map(g => `<div class="grp">${h(g)}</div>` + mods.filter(m => m.g === g).map(m => `<a href="#${m.id}" data-id="${m.id}" title="${h(m.t)}"><i class="ti ti-${m.i}" aria-hidden="true"></i><span>${h(m.t)}</span></a>`).join('')).join('')}</nav>
   <div class="rod"><div class="rod-acoes"><button class="rTema"><i class="ti ti-contrast-2" aria-hidden="true"></i>Tema claro/escuro</button><button class="rSenha"><i class="ti ti-key" aria-hidden="true"></i>Alterar senha</button></div>NIEMAIA Construções · Sousa/PB</div></aside>
   <div class="main"><header class="top"><button class="menu-btn ic" aria-label="Recolher ou abrir o menu" title="Menu"><i class="ti ti-layout-sidebar" aria-hidden="true"></i></button>
@@ -590,7 +599,7 @@ async function rotear() {
   S.rota = m.id;
   $$('.side a, .bnav a').forEach(a => a.classList.toggle('at', a.dataset.id === m.id)); window.scrollTo(0, 0);
   S.charts.forEach(c => c.destroy()); S.charts = [];
-  const cont = $('#cont'); cont.innerHTML = `<div class="pghead"><div class="t"><h1>${h(m.t)}</h1><p>${h(SUBT[m.id] || '')} · ${h(S.obra.codigo)} – ${h(S.obra.nome)}</p></div></div><div id="pg"><div class="vazio">Carregando…</div></div>`;
+  const cont = $('#cont'); cont.innerHTML = `<div class="pghead"><div class="t"><span class="eyebrow">${h(S.obra.codigo)} <i></i> ${h(m.g || '')}</span><h1>${h(m.t)}</h1><p>${h(SUBT[m.id] || '')}</p></div></div><div id="pg"><div class="vazio">Carregando…</div></div>`;
   const el = $('#pg');
   S.nav++;
   try { await m.f()(el); } catch (e) { if (e && e.cancelado) return; erro(e); el.innerHTML = '<div class="vazio">Não foi possível carregar este módulo. <button class="lk" onclick="rotear()">Tentar de novo</button></div>'; }
