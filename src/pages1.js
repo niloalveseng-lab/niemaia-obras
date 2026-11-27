@@ -19,9 +19,9 @@ function realEap(eap, itensMap) {
 }
 async function dadosPainel() {
   const id = S.obra.id;
-  const [itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev] = await Promise.all([
+  const [itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev, R] = await Promise.all([
     q(sb.from('vw_itens_saldo').select('*').eq('obra_id', id).order('ordem')),
-    q(sb.from('eap_atividades').select('*').eq('obra_id', id).order('ordem')),
+    q(sb.from('vw_eap_avanco').select('*').eq('obra_id', id).order('ordem')).then(a => a.map(x => ({ ...x, percentual_executado: x.percentual }))),
     q(sb.from('rdo').select('id,data,status,condicao').eq('obra_id', id).order('data')),
     q(sb.from('rdo_efetivo').select('quantidade,funcao,vinculo,rdo:rdo_id(data)').eq('obra_id', id)),
     q(sb.from('memoria_calculo').select('orcamento_item_id,quantidade,data').eq('obra_id', id)).then(a => a.map(m => ({ orcamento_item_id: m.orcamento_item_id, quantidade: m.quantidade, rdo: { data: m.data } }))),
@@ -30,12 +30,13 @@ async function dadosPainel() {
     q(sb.from('vw_estoque').select('*').eq('obra_id', id)),
     q(sb.from('medicoes').select('numero,status,periodo_fim,data_envio').eq('obra_id', id)),
     q(sb.from('documentos_obra').select('documento,status').eq('obra_id', id)),
-    pode('custos') ? q(sb.from('custos').select('valor,orcamento_item_id').eq('obra_id', id)) : [],
+    pode('custos') ? q(sb.from('vw_custo_real').select('valor,orcamento_item_id,origem').eq('obra_id', id)) : [],
     q(sb.from('certidoes').select('tipo,validade')),
     q(sb.from('funcionarios').select('nome,aso_validade,epi_entregue,ativo').eq('obra_id', id)),
-    q(sb.from('histograma_previsto').select('*').eq('obra_id', id))
+    q(sb.from('histograma_previsto').select('*').eq('obra_id', id)),
+    q(sb.from('vw_obra_resumo').select('*').eq('obra_id', id).maybeSingle())
   ]);
-  return { itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev };
+  return { itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev, R: R || {} };
 }
 function indicadores(D) {
   const o = S.obra, it = D.itens;
@@ -54,16 +55,22 @@ function indicadores(D) {
   const custo = soma(D.custos, c => c.valor);
   const porDia = {}; D.efet.forEach(e => { const d = e.rdo && e.rdo.data; if (d) porDia[d] = (porDia[d] || 0) + e.quantidade; });
   const dias = Object.keys(porDia).sort(); const ultDia = dias[dias.length - 1];
-  return { itensMap, somaItens, temPreco, execValor, fisItens, fisEap, prevHoje, medAprov, cbuqContr, cbuqT, balT, teorBal, custo, porDia, ultDia, valorContr: o.valor_contrato || somaItens };
+  const R = D.R || {}, nn = v => (v === null || v === undefined ? null : Number(v));
+  /* fonte única: vw_obra_resumo (banco). Os cálculos locais acima só servem de reserva. */
+  return { itensMap, somaItens, temPreco, execValor: nn(R.valor_executado) ?? execValor, fisItens: nn(R.fisico_pct) ?? fisItens, fisEap: nn(R.fisico_eap) ?? fisEap, prevHoje: nn(R.previsto_eap) ?? prevHoje,
+    medAprov: nn(R.medido_aprovado) ?? medAprov, cbuqContr, cbuqT, balT, teorBal, custo: nn(R.custo_real) ?? custo, porDia, ultDia,
+    valorContr: nn(R.contrato_atualizado) || o.valor_contrato || somaItens, finPct: nn(R.financeiro_pct), saldo: nn(R.saldo_contrato), aditivo: nn(R.aditivo_valor) || 0,
+    prazoDias: nn(R.prazo_atualizado), decorridos: nn(R.dias_decorridos), prazoPct: nn(R.prazo_pct), termino: R.termino_previsto || null, valorItens: nn(R.valor_itens),
+    custoLanc: nn(R.custo_lancado) || 0, custoEq: nn(R.custo_equip) || 0, custoDiesel: nn(R.custo_diesel) || 0 };
 }
 function alertas(D, K) {
   const a = [], o = S.obra;
   if (['em_andamento', 'mobilizacao'].includes(o.status)) {
-    const datas = new Set(D.rdos.map(r => r.data)); const falta = [];
-    for (let i = 1; i <= 7; i++) { const d = addDias(hoje(), -i); if (new Date(d + 'T12:00:00').getDay() !== 0 && !datas.has(d)) falta.push(dt(d).slice(0, 5)); }
+    const falta = diasSemRdo(D.rdos.map(r => r.data), o.data_inicio);
     if (!D.rdos.length) a.push(['er', 'Nenhum RDO lançado nesta obra.']);
-    else if (falta.length) a.push(['er', `Dias sem RDO na última semana: ${falta.join(', ')}.`]);
+    else if (falta.length) a.push(['er', `Dias sem RDO (últimos ${DIAS_RDO} dias): ${falta.map(d => dt(d).slice(0, 5)).join(', ')}.`]);
   }
+  if (K.valorItens && o.valor_contrato && Math.abs(K.valorItens - o.valor_contrato) > 1) a.push(['av', `Soma dos itens do orçamento (${brl(K.valorItens)}) difere do valor do contrato (${brl(o.valor_contrato)}) em ${brl(K.valorItens - o.valor_contrato)}. Conferir a planilha.`]);
   const env = D.rdos.filter(r => r.status === 'enviado').length; if (env) a.push(['av', `${env} RDO(s) aguardando aprovação do gestor.`]);
   const dev = D.rdos.filter(r => r.status === 'devolvido').length; if (dev) a.push(['er', `${dev} RDO(s) devolvido(s) para correção.`]);
   D.eqs.filter(e => ['parado', 'manutencao'].includes(e.status)).forEach(e => a.push(['av', `Equipamento ${e.prefixo} (${e.descricao}): ${L.status_eq[e.status].toLowerCase()}.`]));
@@ -84,15 +91,15 @@ function alertas(D, K) {
 async function pgPainel(el) {
   const D = await dadosPainel(), K = indicadores(D), o = S.obra;
   const al = alertas(D, K);
-  const prazo = o.data_os && o.prazo_dias ? (() => { const dec = Math.round((new Date(hoje()) - new Date(o.data_os)) / 864e5); return `${dec} de ${o.prazo_dias} dias (${nf(100 * dec / o.prazo_dias, 0)}%)`; })() : 'a preencher';
-  el.innerHTML = `<p class="muted" style="margin:-10px 0 14px">${h(o.contratante || 'Contratante a preencher')} · Prazo decorrido: ${prazo}</p>
+  const sub = (v, x) => v === null || v === undefined ? '–' : x;
+  el.innerHTML = `<p class="muted" style="margin:-10px 0 14px">${h(o.contratante || 'Contratante a preencher')}${K.termino ? ' · término previsto ' + dt(K.termino) : ''}</p>
   <div class="kpis">
-   <div class="kpi"><span>Avanço físico (itens)</span><b>${pct(K.fisItens)}</b><small>${K.temPreco ? 'ponderado pelo valor' : 'média dos itens (preços a preencher)'}</small></div>
-   <div class="kpi"><span>Avanço físico (EAP)</span><b>${pct(K.fisEap)}</b><small>previsto hoje: ${pct(K.prevHoje)}</small></div>
-   <div class="kpi"><span>Valor contratado</span><b>${K.valorContr ? brl(K.valorContr) : '–'}</b><small>executado: ${K.temPreco ? brl(K.execValor) : 'preços a preencher'}</small></div>
-   <div class="kpi"><span>Medido aprovado</span><b>${brl(K.medAprov)}</b><small>saldo: ${K.valorContr ? brl(K.valorContr - K.medAprov) : '–'}</small></div>
+   <div class="kpi"><span>% físico</span><b>${pct(K.fisItens)}</b>${barra(K.fisItens, K.prevHoje)}<small>${!D.itens.length ? 'sem orçamento carregado' : K.prevHoje !== null ? 'previsto hoje (cronograma): ' + pct(K.prevHoje) : 'cronograma sem datas previstas'}</small></div>
+   <div class="kpi"><span>% financeiro</span><b>${pct(K.finPct)}</b>${barra(K.finPct)}<small>medido aprovado ${brl(K.medAprov)}</small></div>
+   <div class="kpi"><span>Prazo</span><b>${K.prazoDias ? `${K.decorridos} de ${K.prazoDias} dias` : 'a preencher'}</b>${K.prazoDias ? barra(K.prazoPct) : ''}<small>${K.prazoDias ? pct(K.prazoPct) + ' do prazo' + (K.termino ? ' · fim ' + dt(K.termino) : '') : 'informe data de início/OS e prazo em Obras'}</small></div>
+   <div class="kpi"><span>Saldo do contrato</span><b>${sub(K.saldo, brl(K.saldo))}</b><small>contrato ${K.valorContr ? brl(K.valorContr) : '–'}${K.aditivo ? ' (aditivos ' + brl(K.aditivo) + ')' : ''}</small></div>
    ${K.cbuqContr ? `<div class="kpi"><span>CBUQ aplicado (área × 0,05 × 2,40)</span><b>${nf(K.cbuqT, 1)} t</b><small>de ${nf(K.cbuqContr, 1)} t (${pct(100 * K.cbuqT / K.cbuqContr)}) · balança ${nf(K.balT, 1)} t</small></div>` : ''}
-   ${pode('custos') ? `<div class="kpi"><span>Custo real × executado</span><b>${brl(K.custo)}</b><small>${K.temPreco && K.execValor ? 'margem ' + pct(100 * (K.execValor - K.custo) / K.execValor) : 'margem: sem preços'}</small></div>` : ''}
+   ${pode('custos') ? `<div class="kpi"><span>Custo real</span><b>${brl(K.custo)}</b><small>lançado ${brl(K.custoLanc)} · máquinas ${brl(K.custoEq)} · diesel ${brl(K.custoDiesel)}${K.temPreco && K.execValor ? ' · margem ' + pct(100 * (K.execValor - K.custo) / K.execValor) : ''}</small></div>` : ''}
    <div class="kpi"><span>Efetivo no último RDO</span><b>${K.ultDia ? K.porDia[K.ultDia] : '–'}</b><small>${K.ultDia ? dt(K.ultDia) : 'sem RDO'}</small></div>
   </div>
   <div class="g2"><div class="card"><h3 style="margin-top:0">Curva S – planejado × realizado</h3><div style="position:relative;height:280px"><canvas id="cS"></canvas></div><p class="muted" id="cSm"></p></div>
@@ -245,15 +252,18 @@ function gantt(box, rows) {
   const meses = []; for (let x = new Date(ds[0].slice(0, 7) + '-01T00:00:00'); x.getTime() < t1; x.setMonth(x.getMonth() + 1)) meses.push(x.toISOString().slice(0, 10));
   box.innerHTML = `<div class="card"><h3 style="margin-top:0">Cronograma (Gantt)</h3><div class="gantt"><div class="esc"><div></div><div style="position:relative;height:18px">${meses.map(m => `<span style="position:absolute;left:${Math.max(0, pos(m))}%">${m.slice(5, 7)}/${m.slice(2, 4)}</span>`).join('')}</div></div>
   ${at.map(a => { const i = a.inicio_previsto || a.inicio_real, f = a.fim_previsto || a.fim_real || i;
-    return `<div class="row"><div class="nm" title="${h(a.nome)}">${h(a.codigo || '')} ${h(a.nome)}</div><div class="tr">${a.status === 'marco' && i === f ? `<div class="mk" style="left:calc(${pos(i)}% - 6px)" title="${dt(i)}"></div>` : `<div class="pl" style="left:${pos(i)}%;width:${Math.max(0.6, pos(addDias(f, 1)) - pos(i))}%" title="${dt(i)} a ${dt(f)} · ${nf(a.percentual_executado, 0)}%"><i style="width:${Number(a.percentual_executado) || 0}%"></i></div>`}<div class="hj" style="left:${pos(hoje())}%"></div></div></div>`; }).join('')}</div><p class="muted">Barra cinza: previsto. Laranja: % executado. Linha azul: hoje.</p></div>`;
+    return `<div class="row"><div class="nm" title="${h(a.nome)}">${h(a.codigo || '')} ${h(a.nome)}</div><div class="tr">${a.status === 'marco' && i === f ? `<div class="mk" style="left:calc(${pos(i)}% - 6px)" title="${dt(i)}"></div>` : `<div class="pl" style="left:${pos(i)}%;width:${Math.max(0.6, pos(addDias(f, 1)) - pos(i))}%" title="${dt(i)} a ${dt(f)} · ${nf((a.percentual ?? a.percentual_executado), 0)}%"><i style="width:${Number((a.percentual ?? a.percentual_executado)) || 0}%"></i></div>`}<div class="hj" style="left:${pos(hoje())}%"></div></div></div>`; }).join('')}</div><p class="muted">Barra cinza: previsto. Laranja: % executado. Linha azul: hoje.</p></div>`;
 }
 async function pgPlanejamento(el) {
   abas(el, [
     { t: 'EAP e cronograma', f: c => crud(c, { table: 'eap_atividades', title: 'EAP e cronograma físico', doc: 'EAP', order: 'ordem', write: 'planejar', paisagem: true,
+      intro: 'Atividade com item do orçamento: o % executado é calculado sozinho pela memória de cálculo e pela produção de CBUQ (executado ÷ quantidade prevista). Sem item, informe o % à mão.',
+      load: () => q(sb.from('vw_eap_avanco').select('*').eq('obra_id', S.obra.id).order('ordem')),
       cols: [{ k: 'ordem', l: 'Ordem', t: 'num', d: 0 }, { k: 'codigo', l: 'Código' }, { k: 'nome', l: 'Atividade', req: true, w: 'w2' }, { k: 'frente', l: 'Frente' },
         { k: 'orcamento_item_id', l: 'Item do orçamento', t: 'ref', ref: 'item', formOnly: true, w: 'w2' }, { k: 'unidade', l: 'Un', formOnly: true }, { k: 'quantidade_prevista', l: 'Qtd prevista', t: 'num', formOnly: true },
         { k: 'inicio_previsto', l: 'Início prev.', t: 'date' }, { k: 'fim_previsto', l: 'Fim prev.', t: 'date' }, { k: 'inicio_real', l: 'Início real', t: 'date' }, { k: 'fim_real', l: 'Fim real', t: 'date' },
-        { k: 'percentual_executado', l: '% exec.', t: 'num', d: 0 }, { k: 'predecessora', l: 'Predecessora' }, { k: 'status', l: 'Situação', t: 'sel', o: L.status_eap, badge: true, req: true, def: 'nao_iniciada' },
+        { k: 'pct', l: '% exec.', listOnly: true, html: true, v: r => `${nf(r.percentual ?? r.percentual_executado ?? 0, 1)}%${r.percentual_auto !== null && r.percentual_auto !== undefined ? ' <span class="badge b-az" title="Calculado pela produção">auto</span>' : ''}` },
+        { k: 'percentual_executado', l: '% executado (manual, só sem item)', t: 'num', d: 0, formOnly: true }, { k: 'predecessora', l: 'Predecessora' }, { k: 'status', l: 'Situação', t: 'sel', o: L.status_eap, badge: true, req: true, def: 'nao_iniciada' },
         { k: 'observacao', l: 'Observação', t: 'area', w: 'wf' }],
       resumo: (b, r) => gantt(b, r) }) },
     { t: 'Histograma previsto', f: c => crud(c, { table: 'histograma_previsto', title: 'Histograma de mão de obra previsto', doc: 'HISTOGRAMA_PREVISTO', order: 'mes', write: 'planejar',

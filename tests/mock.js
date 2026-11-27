@@ -26,6 +26,9 @@ const DB = {
 };
 const view = t => {
   if (t === 'vw_itens_saldo') return DB.orcamento_itens.map(i => ({ ...i, qtd_contratada: i.quantidade, valor_contratado: (i.quantidade || 0) * (i.preco_unitario || 0), qtd_executada: 120, perc_executado: 1, qtd_medida_total: 0, qtd_saldo: i.quantidade, valor_medido_aprovado: 0 }));
+  if (t === 'vw_eap_avanco') return DB.eap_atividades.map(a => ({ ...a, percentual: a.percentual_executado || 0, percentual_auto: a.orcamento_item_id ? 10 : null }));
+  if (t === 'vw_custo_real') return [...DB.custos.map(c => ({ ...c, origem: 'lancamento' })), ...DB.abastecimentos.map(a => ({ obra_id: a.obra_id, data: a.data, categoria: 'combustivel', origem: 'abastecimento', valor: a.valor || 0 }))];
+  if (t === 'vw_obra_resumo') return OB.map(o => ({ obra_id: o.id, codigo: o.codigo, contrato_atualizado: o.valor_contrato || 0, valor_itens: o.id === 'o1' ? 17951372.14 : null, fisico_pct: o.id === 'o1' ? 1.5 : null, fisico_eap: 5, previsto_eap: o.id === 'o1' ? 12 : null, medido_aprovado: 0, financeiro_pct: 0, saldo_contrato: o.valor_contrato || 0, prazo_atualizado: o.prazo_dias || null, dias_decorridos: o.data_inicio ? 57 : null, prazo_pct: o.data_inicio ? 15.6 : null, termino_previsto: o.data_inicio ? '2027-10-01' : null, custo_real: 1000, custo_lancado: 1000, custo_equip: 0, custo_diesel: 0, valor_executado: 0 }));
   if (t === 'vw_estoque') return DB.materiais.map(m => ({ ...m, saldo: 2, em_pedido: 0 }));
   return DB[t];
 };
@@ -33,7 +36,7 @@ function builder(t) {
   let rows = null, op = 'select', payload = null, filt = [], single = false, sel = '';
   const b = {
     select(s) { sel = s || ''; return b; }, eq(k, v) { filt.push([k, '=', v]); return b; }, gte(k, v) { filt.push([k, '>=', v]); return b; }, lte(k, v) { filt.push([k, '<=', v]); return b; }, lt(k, v) { filt.push([k, '<', v]); return b; },
-    in(k, v) { filt.push([k, 'in', v]); return b; }, is(k, v) { filt.push([k, 'is', v]); return b; }, neq(k, v) { filt.push([k, '!=', v]); return b; }, order() { return b; }, not() { return b; }, limit() { return b; }, single() { single = true; return b; },
+    in(k, v) { filt.push([k, 'in', v]); return b; }, is(k, v) { filt.push([k, 'is', v]); return b; }, neq(k, v) { filt.push([k, '!=', v]); return b; }, order() { return b; }, not() { return b; }, limit() { return b; }, single() { single = true; return b; }, maybeSingle() { single = true; return b; }, or() { return b; },
     insert(p) { op = 'insert'; payload = p; return b; }, update(p) { op = 'update'; payload = p; return b; }, delete() { op = 'delete'; return b; }, upsert(p) { op = 'insert'; payload = p; return b; },
     then(ok, no) {
       try {

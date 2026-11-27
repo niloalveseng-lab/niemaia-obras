@@ -346,6 +346,19 @@ async function formCrud(cfg, row, depois, canW) {
   } });
   modal((row ? (canW ? 'Editar' : 'Ver') : 'Novo') + ' – ' + cfg.title, box, bt);
 }
+/* dias (seg–sáb, até ontem) sem RDO nos últimos DIAS_RDO dias, a partir do início da obra ou do 1º RDO; regra única do painel e das pendências */
+const DIAS_RDO = 15;
+function diasSemRdo(datas, inicioObra) {
+  const tem = new Set(datas); const ini = [inicioObra, [...tem].sort()[0]].filter(Boolean).sort()[0]; if (!ini) return [];
+  const out = []; for (let d = addDias(hoje(), -DIAS_RDO); d < hoje(); d = addDias(d, 1)) if (d >= ini && new Date(d + 'T12:00:00').getDay() !== 0 && !tem.has(d)) out.push(d);
+  return out;
+}
+/* barra de progresso dos KPIs (valor e, opcional, marcador do previsto) */
+function barra(v, prev) {
+  if (v === null || v === undefined || isNaN(v)) return '';
+  const w = Math.max(0, Math.min(100, Number(v))), p = prev === null || prev === undefined ? null : Math.max(0, Math.min(100, Number(prev)));
+  return `<div class="kbar" role="presentation"><i style="width:${w}%"></i>${p !== null ? `<em style="left:${p}%" title="previsto"></em>` : ''}</div>`;
+}
 /* gráficos: se a biblioteca não carregar (sem sinal), mostra aviso e o resto da tela segue funcionando */
 function grafico(canvas, cfg) {
   if (!canvas) return null;
