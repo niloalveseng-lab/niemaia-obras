@@ -277,7 +277,7 @@ async function abastecimentoDia(c) {
     for (const x of db) if (!manter.has(x.id)) await q(sb.from('abastecimentos').delete().eq('id', x.id));
     for (const l of a) { const v = Object.fromEntries(cols.map(k => [k, l[k] === '' || l[k] === undefined ? null : l[k]])); v.combustivel = v.combustivel || 'diesel_s10'; v.data = DIA_ABAST; v.obra_id = S.obra.id; if (l.id) await q(sb.from('abastecimentos').update(v).eq('id', l.id)); else await q(sb.from('abastecimentos').insert(v)); }
     if (pode('equip')) for (const l of a) { const e = eqMap[l.equipamento_id]; if (e && l.horimetro != null && (e.horimetro_atual == null || l.horimetro > e.horimetro_atual)) await sb.from('equipamentos').update({ horimetro_atual: l.horimetro }).eq('id', e.id); }
-    S.ref.equip = null; toast(`Ficha de ${dt(DIA_ABAST)} salva (${a.length} abastecimentos)`, 'ok'); await carregar();
+    refLimpar('equip'); toast(`Ficha de ${dt(DIA_ABAST)} salva (${a.length} abastecimentos)`, 'ok'); await carregar();
   } catch (e) { erro(e); } };
   const tab = () => G.get().filter(l => l.litros).map(l => { const e = eqMap[l.equipamento_id] || {}; return [l.hora || '', e.prefixo || '', e.descricao || '', num(l.horimetro), num(l.odometro), L_COMB[l.combustivel || 'diesel_s10'], num(l.litros), ...(vc ? [num(l.preco_litro), (Number(l.litros) || 0) * (Number(l.preco_litro) || 0)] : []), l.origem || '', l.documento || '', l.responsavel || '']; });
   const head = ['Hora', 'Prefixo', 'Equipamento', 'Horímetro', 'Odômetro', 'Combustível', 'Litros', ...(vc ? ['R$/litro', 'Valor (R$)'] : []), 'Origem', 'Cupom/req.', 'Responsável'];

@@ -99,7 +99,7 @@ async function rdoEditor(id, dataNova) {
     try {
       const nid = await salvarRdoPayload(p);
       if (pode('equip')) for (const x of p.equips) { const e = equips.find(z => z.id === x.equipamento_id); if (e && x.horimetro_fim != null && (e.horimetro_atual == null || x.horimetro_fim > e.horimetro_atual)) await sb.from('equipamentos').update({ horimetro_atual: x.horimetro_fim }).eq('id', e.id); }
-      S.ref.equip = null; toast(status === 'enviado' ? 'RDO enviado para aprovação' : status === 'aprovado' ? 'RDO aprovado' : 'RDO salvo', 'ok');
+      refLimpar('equip'); toast(status === 'enviado' ? 'RDO enviado para aprovação' : status === 'aprovado' ? 'RDO aprovado' : 'RDO salvo', 'ok');
       return nid;
     } catch (e) {
       if (/fetch|network/i.test(e.message)) { const pend = pendentes().filter(x => !(x.rdo.obra_id === p.rdo.obra_id && x.rdo.data === p.rdo.data)); pend.push(p); setPendentes(pend); toast('Sem conexão: RDO guardado neste aparelho. Sincronize quando houver sinal.', 'erro'); return null; }

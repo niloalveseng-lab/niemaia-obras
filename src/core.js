@@ -3,7 +3,7 @@ const SUPABASE_URL = 'https://mgeyluuonvshdjkgxvaw.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nZXlsdXVvbnZzaGRqa2d4dmF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU0MTE2MDYsImV4cCI6MjExMDk4NzYwNn0.80bNMlrF08e9N4s4Tti_-urU-hxc2vYnJo68vfSC-mY';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const S = { user: null, me: null, obras: [], obra: null, perfil: null, ref: {}, charts: [], rota: 'painel' };
+const S = { user: null, me: null, obras: [], obra: null, perfil: null, ref: {}, charts: [], rota: 'painel', nav: 0 };
 
 /* ---------- utilitários ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -26,7 +26,10 @@ async function fnAdmin(body) {
   return data;
 }
 function senhaProvisoria() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'; const r = new Uint32Array(10); crypto.getRandomValues(r); return 'Nm' + [...r].map(x => a[x % a.length]).join('').slice(0, 8) + '!'; }
-async function q(p) { const { data, error } = await p; if (error) throw error; return data; }
+/* q(): executa a consulta. Leitura (GET) iniciada antes de uma troca de tela/obra/aba é descartada,
+   para que um resultado atrasado não seja desenhado na tela nova. */
+const CANCELADO = Object.assign(new Error('Carregamento anterior descartado'), { cancelado: true });
+async function q(p) { const tok = S.nav; const { data, error } = await p; if (p && p.method === 'GET' && tok !== S.nav) throw CANCELADO; if (error) throw error; return data; }
 
 const L = {
   status_obra: { planejamento: 'Planejamento', mobilizacao: 'Mobilização', em_andamento: 'Em andamento', paralisada: 'Paralisada', concluida: 'Concluída' },
@@ -75,6 +78,7 @@ const pode = k => PODE[k].includes(S.perfil);
 
 function toast(t, tipo = '') { const d = document.createElement('div'); d.className = tipo; d.textContent = t; $('#toast').appendChild(d); setTimeout(() => d.remove(), tipo === 'erro' ? 9000 : 4000); }
 function erro(e) {
+  if (e && e.cancelado) return;
   console.error(e);
   let m = (e && e.message) || String(e);
   if (e && e.code === '23505') m = m.includes('rdo_obra_id_data') ? 'Já existe RDO desta obra nesta data.' : m.includes('medicoes_obra_id_numero') ? 'Já existe medição com este número.' : 'Registro duplicado.';
@@ -104,18 +108,17 @@ function modal(titulo, corpo, botoes = []) {
 function confirma(texto, f) { modal('Confirmar', `<p>${h(texto)}</p>`, [{ t: 'Confirmar', c: 'pri', f }]); }
 
 /* ---------- referências da obra ---------- */
-async function refItens(force) {
-  if (!S.ref.itens || force) S.ref.itens = await q(sb.from('orcamento_itens').select('id,ordem,item,descricao,unidade,quantidade,preco_unitario,tipo_area').eq('obra_id', S.obra.id).eq('ativo', true).order('ordem'));
-  return S.ref.itens;
+/* cache de listas por obra: a chave inclui a obra, então trocar de obra no meio de um carregamento não mistura dados */
+async function refCache(nome, force, consulta) {
+  const ob = S.obra.id, k = nome + '|' + ob;
+  if (!S.ref[k] || force) { const r = await consulta(ob); S.ref[k] = r; }
+  return S.ref[k];
 }
-async function refEquip(force) {
-  if (!S.ref.equip || force) S.ref.equip = await q(sb.from('equipamentos').select('id,prefixo,descricao,tipo,status,horimetro_atual').eq('obra_id', S.obra.id).order('prefixo'));
-  return S.ref.equip;
-}
-async function refMat(force) {
-  if (!S.ref.mat || force) S.ref.mat = await q(sb.from('materiais').select('id,nome,unidade').eq('obra_id', S.obra.id).order('nome'));
-  return S.ref.mat;
-}
+const refItens = force => refCache('itens', force, ob => q(sb.from('orcamento_itens').select('id,ordem,item,codigo,descricao,unidade,quantidade,preco_unitario,tipo_area').eq('obra_id', ob).eq('ativo', true).order('ordem')));
+const refEquip = force => refCache('equip', force, ob => q(sb.from('equipamentos').select('id,prefixo,descricao,tipo,status,horimetro_atual').eq('obra_id', ob).order('prefixo')));
+const refAgora = nome => S.ref[nome + '|' + S.obra.id];
+const refLimpar = nome => { delete S.ref[nome + '|' + S.obra.id]; };
+const refMat = force => refCache('mat', force, ob => q(sb.from('materiais').select('id,nome,unidade').eq('obra_id', ob).order('nome')));
 const ehCbuq = i => String(i.unidade).toLowerCase() === 't' && /CBUQ|BETUMINOSO USINADO/i.test(i.descricao || '');
 const imprimaTipo = t => t === 'leito_natural' || t === 'requalificacao';
 const itemLbl = i => i ? `${i.item || i.ordem || ''} – ${i.descricao} (${i.unidade})` : '';
@@ -367,7 +370,7 @@ async function abrirAnexo(bucket, caminho, nome) {
 }
 function abas(el, lista, ini) {
   el.innerHTML = `<div class="tabs">${lista.map((a, i) => `<button data-i="${i}">${h(a.t)}</button>`).join('')}</div><div class="tabc"></div>`;
-  const ir = async i => { $$('.tabs button', el).forEach(b => b.classList.toggle('at', b.dataset.i == i)); const c = $('.tabc', el); c.innerHTML = '<div class="vazio">Carregando…</div>'; try { await lista[i].f(c); } catch (e) { erro(e); c.innerHTML = '<div class="vazio">Não foi possível carregar.</div>'; } };
+  const ir = async i => { S.nav++; $$('.tabs button', el).forEach(b => b.classList.toggle('at', b.dataset.i == i)); const c = $('.tabc', el); c.innerHTML = '<div class="vazio">Carregando…</div>'; try { await lista[i].f(c); } catch (e) { if (e && e.cancelado) return; erro(e); c.innerHTML = '<div class="vazio">Não foi possível carregar. <button class="lk" onclick="rotear()">Tentar de novo</button></div>'; } };
   $('.tabs', el).onclick = e => { const b = e.target.closest('button'); if (b) ir(+b.dataset.i); };
   ir(ini || 0);
 }
@@ -467,7 +470,8 @@ async function rotear() {
   S.charts.forEach(c => c.destroy()); S.charts = [];
   const cont = $('#cont'); cont.innerHTML = `<div class="pghead"><div class="t"><h1>${h(m.t)}</h1><p>${h(SUBT[m.id] || '')} · ${h(S.obra.codigo)} – ${h(S.obra.nome)}</p></div></div><div id="pg"><div class="vazio">Carregando…</div></div>`;
   const el = $('#pg');
-  try { await m.f()(el); } catch (e) { erro(e); el.innerHTML = '<div class="vazio">Não foi possível carregar este módulo.</div>'; }
+  S.nav++;
+  try { await m.f()(el); } catch (e) { if (e && e.cancelado) return; erro(e); el.innerHTML = '<div class="vazio">Não foi possível carregar este módulo. <button class="lk" onclick="rotear()">Tentar de novo</button></div>'; }
 }
 
 /* ---------- RDO offline ---------- */

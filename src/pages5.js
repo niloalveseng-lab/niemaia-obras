@@ -196,7 +196,7 @@ function modeloAvancos() {
   ws['!cols'] = COLS_AV.map(c => ({ wch: ['local', 'material', 'observacao'].includes(c) ? 26 : 12 }));
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 17 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 17 } }];
   XLSX.utils.book_append_sheet(wb, ws, 'AVANCOS');
-  const it = XLSX.utils.aoa_to_sheet([['Código', 'Item', 'Descrição', 'Unidade'], ...(S.ref.itens || []).map(i => [i.codigo || '', i.item || '', i.descricao, i.unidade])]);
+  const it = XLSX.utils.aoa_to_sheet([['Código', 'Item', 'Descrição', 'Unidade'], ...(refAgora('itens') || []).map(i => [i.codigo || '', i.item || '', i.descricao, i.unidade])]);
   it['!cols'] = [{ wch: 14 }, { wch: 8 }, { wch: 70 }, { wch: 8 }];
   XLSX.utils.book_append_sheet(wb, it, 'ITENS DO ORCAMENTO');
   XLSX.writeFile(wb, `${S.obra.codigo}_FICHA_AVANCOS.xlsx`);
@@ -226,7 +226,7 @@ async function importarAvancos(c) {
     const t = $('#avTxt').value.trim();
     if (t.startsWith('{') || t.startsWith('[')) { const j = JSON.parse(t.replace(/^```(json)?|```$/g, '')); if (j.obra && semAcento(j.obra).replace(/[^a-z]/g, '') !== semAcento(S.obra.codigo).replace(/[^a-z]/g, '')) throw new Error(`O arquivo é da obra ${j.obra}, mas a obra selecionada é ${S.obra.codigo}.`); linhas = Array.isArray(j) ? j : (j.avancos || []); }
     if (!linhas || !linhas.length) throw new Error('Escolha a planilha ou cole o JSON.');
-    const itens = S.ref.itens; const itMap = Object.fromEntries(itens.map(i => [i.id, i]));
+    const itens = await refItens(); const itMap = Object.fromEntries(itens.map(i => [i.id, i]));
     let L1 = linhas.map((r, k) => {
       const av = []; const data = normData(r.data); if (!data) av.push('data inválida');
       const it = acharItem(r.item || r.codigo, itens); if (!it) av.push(`item "${r.item || r.codigo || ''}" não encontrado`);
