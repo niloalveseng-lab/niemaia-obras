@@ -111,7 +111,7 @@ async function importarRdo(c) {
   <div class="card"><h3>2. Documentos do RDO (opcional)</h3><p class="muted">PDF ou Word gerados no Claude. O sistema anexa ao RDO do dia pela data no nome do arquivo (ex.: <code>RUAS_RDO_2026-11-23.pdf</code> ou <code>RDO 23-11-2026.docx</code>).</p><input type="file" id="iDocs" accept=".pdf,.docx,.doc" multiple>
   <h3>3. Opções</h3><div class="form"><div><label for="iSt">Situação ao importar</label><select id="iSt"><option value="rascunho">Rascunho</option><option value="enviado" selected>Enviar para aprovação</option></select></div><div><label for="iEx">Se já existir RDO no dia</label><select id="iEx"><option value="pular">Não mexer (pular)</option><option value="substituir">Substituir (se não aprovado)</option></select></div>
   <div class="wf"><div class="chk"><input type="checkbox" id="iFot" checked><span>Importar as fotos do documento Word para o RDO (com a legenda e a data/hora do documento)</span></div></div>
-  <div class="wf"><div class="chk"><input type="checkbox" id="iMem" checked><span>Lançar os serviços com item do orçamento na memória de cálculo (produção mensal)</span></div></div></div></div></div>
+  <div class="wf"><p class="muted" style="margin:0">Os serviços entram na memória de cálculo quando o RDO for aprovado pelo gestor (serviço com item e na unidade do orçamento).</p></div></div></div></div>
   <div class="bar"><span class="sp"></span><button class="pri" id="iAn"><i class="ti ti-search"></i>Analisar</button></div><div id="iPrev"></div>`;
   $('#iMod').onclick = modeloXlsx;
   let pacote = null, plano = [];
@@ -155,11 +155,6 @@ async function importarRdo(c) {
         const payload = { obra_codigo: S.obra.codigo, rdo: { ...p.rdo, id: p.ex ? p.ex.id : undefined, status: $('#iSt').value }, servicos: p.servicos.map(({ _esp, _semMem, ...s }) => s), efetivo: p.efetivo, equips: p.equips };
         if (payload.rdo.status === 'enviado' && p.ex && p.ex.status === 'aprovado') payload.rdo.status = 'aprovado';
         const id = await salvarRdoPayload(payload);
-        if ($('#iMem').checked) {
-          await q(sb.from('memoria_calculo').delete().eq('rdo_id', id));
-          const linhas = p.servicos.filter(s => s.orcamento_item_id && s.quantidade && !s._semMem).map(s => { const [ii, fi] = parseEst(s.estaca_ini), [ie, fe] = parseEst(s.estaca_fim); const l = { est_ini_int: ii, est_ini_frac: fi, est_fim_int: ie, est_fim_frac: fe, lado: s.lado, comprimento: s.comprimento, largura: s.largura, espessura: s._esp, quantidade: s.quantidade }; return { obra_id: S.obra.id, data: p.data, rdo_id: id, orcamento_item_id: s.orcamento_item_id, local: s.local, ...l, observacao: s.observacao, formula: calcMemoria(l, its[s.orcamento_item_id]).formula || `${nf(s.quantidade)} ${s.unidade || ''}` }; });
-          if (linhas.length) { await q(sb.from('memoria_calculo').insert(linhas)); mem += linhas.length; }
-        }
         if (p.doc) { const ext = p.doc.name.split('.').pop().toLowerCase(); const cam = `${S.obra.id}/rdo/${p.data}_${Date.now()}.${ext}`; await q(sb.storage.from('documentos').upload(cam, p.doc, { upsert: true, contentType: p.doc.type || undefined })); await q(sb.from('rdo').update({ anexo_caminho: cam, anexo_nome: p.doc.name }).eq('id', id)); }
         if ($('#iFot').checked && p.fotos.length) {
           const jaTem = await q(sb.from('fotos').select('legenda').eq('rdo_id', id)); const leg = new Set(jaTem.map(f => f.legenda));
@@ -237,28 +232,31 @@ async function importarAvancos(c) {
     });
     if ($('#avAgr').checked) { const g = {}; L1.forEach(x => { const key = [x.data, x.it && x.it.id, x.local, x.l.est_ini_int, x.l.est_ini_frac, x.l.est_fim_int, x.l.est_fim_frac, x.l.lado, x.l.cap_viagem, x.camada].join('|'); if (g[key] && x.l.n_viagens != null && g[key].l.n_viagens != null && x.l.quantidade == null && g[key].l.quantidade == null) { g[key].l.n_viagens += x.l.n_viagens; g[key].extra.prefixo = [g[key].extra.prefixo, x.extra.prefixo].filter(Boolean).join(', '); g[key].av.push(...x.av); } else g[key + (g[key] ? '#' + x.k : '')] = x; }); L1 = Object.values(g); }
     const datas = [...new Set(L1.map(x => x.data).filter(Boolean))].sort();
-    const exist = datas.length ? await q(sb.from('memoria_calculo').select('data,orcamento_item_id,local,est_ini_int,est_ini_frac,est_fim_int,est_fim_frac,quantidade').eq('obra_id', S.obra.id).gte('data', datas[0]).lte('data', datas[datas.length - 1])) : [];
+    const exist = datas.length ? await q(sb.from('memoria_calculo').select('data,orcamento_item_id,local,est_ini_int,est_ini_frac,est_fim_int,est_fim_frac,quantidade,origem').eq('obra_id', S.obra.id).gte('data', datas[0]).lte('data', datas[datas.length - 1])) : [];
     const chave = (d, i, loc, a, b, c2, d2, q2) => [d, i, semAcento(loc), a ?? '', Number(b) || 0, c2 ?? '', Number(d2) || 0, Math.round((Number(q2) || 0) * 100)].join('|');
     const ks = new Set(exist.map(m => chave(m.data, m.orcamento_item_id, m.local, m.est_ini_int, m.est_ini_frac, m.est_fim_int, m.est_fim_frac, m.quantidade)));
+    /* produção que já veio de RDO aprovado (mesma data, item, local e estacas) não entra de novo pela ficha, mesmo com quantidade diferente */
+    const ksRdo = new Set(exist.filter(m => m.origem === 'rdo').map(m => chave(m.data, m.orcamento_item_id, m.local, m.est_ini_int, m.est_ini_frac, m.est_fim_int, m.est_fim_frac, 0)));
     plano = L1.map(x => {
       const r = x.it ? calcMemoria(x.l, x.it) : {}; const qtd = x.l.quantidade ?? r.quantidade ?? null;
       if (x.it && qtd == null) x.av.push(`quantidade não calculável para unidade ${x.it.unidade}: preencha a quantidade`);
       const comp = r.comprimento ?? x.l.comprimento;
       const extras = [x.extra.material, x.extra.prefixo ? 'caminhão ' + x.extra.prefixo : null, x.extra.dmt != null ? `DMT ${nf(x.extra.dmt, 1)} km` : null, x.extra.apontador ? 'apont. ' + x.extra.apontador : null].filter(Boolean).join(' · ');
       const formula = (x.it ? (calcMemoria({ ...x.l, quantidade: qtd }, x.it).formula || `${nf(qtd)} ${x.it.unidade}`) : '') + (extras ? ` [${extras}]` : '');
-      const dup = x.it && x.data && qtd != null && ks.has(chave(x.data, x.it.id, x.local, x.l.est_ini_int, x.l.est_ini_frac, x.l.est_fim_int, x.l.est_fim_frac, qtd));
+      const doRdo = x.it && x.data && ksRdo.has(chave(x.data, x.it.id, x.local, x.l.est_ini_int, x.l.est_ini_frac, x.l.est_fim_int, x.l.est_fim_frac, 0));
+      const dup = doRdo || (x.it && x.data && qtd != null && ks.has(chave(x.data, x.it.id, x.local, x.l.est_ini_int, x.l.est_ini_frac, x.l.est_fim_int, x.l.est_fim_frac, qtd)));
       const okL = x.data && x.it && qtd != null && !x.av.some(a => a.includes('menor'));
-      return { ...x, qtd, comp, formula, dup, acao: !okL ? 'erro' : (dup && $('#avDup').checked ? 'pular' : 'importar'), obs: [x.extra.obs, extras].filter(Boolean).join(' · ') || null };
+      return { ...x, qtd, comp, formula, dup, acao: !okL ? 'erro' : doRdo ? 'rdo' : (dup && $('#avDup').checked ? 'pular' : 'importar'), obs: [x.extra.obs, extras].filter(Boolean).join(' · ') || null };
     });
     const totI = {}; plano.filter(p => p.acao === 'importar').forEach(p => { totI[p.it.id] = (totI[p.it.id] || 0) + p.qtd; });
-    const AC = { importar: '<span class="badge b-ok">Importar</span>', pular: '<span class="badge">Já existe</span>', erro: '<span class="badge b-er">Corrigir</span>' };
+    const AC = { importar: '<span class="badge b-ok">Importar</span>', pular: '<span class="badge">Já existe</span>', rdo: '<span class="badge b-az">Já veio do RDO</span>', erro: '<span class="badge b-er">Corrigir</span>' };
     $('#avPrev').innerHTML = `<div class="card"><h3>Prévia: ${plano.length} linha(s) · ${plano.filter(p => p.acao === 'importar').length} para importar</h3>
     <div class="kpis">${Object.entries(totI).map(([i, v]) => `<div class="kpi"><span>${h(itMap[i].codigo || '')} ${h(itMap[i].descricao).slice(0, 60)}</span><b>${nf(v)} ${h(itMap[i].unidade)}</b></div>`).join('')}</div>
     <div class="tw" style="max-height:55vh"><table class="grid"><thead><tr><th>#</th><th>Ação</th><th>Data</th><th>Item</th><th>Local</th><th>Estacas</th><th>Lado</th><th>Memória</th><th class="n">Quantidade</th><th>Avisos</th></tr></thead><tbody>${plano.map(p => `<tr><td>${p.k}</td><td>${AC[p.acao]}</td><td>${dt(p.data)}</td><td>${p.it ? h((p.it.codigo || '') + ' ' + p.it.descricao).slice(0, 50) : '–'}</td><td>${h(p.local || '')}</td><td>${estTxt(p.l.est_ini_int, p.l.est_ini_frac)}${p.l.est_fim_int != null ? ' a ' + estTxt(p.l.est_fim_int, p.l.est_fim_frac) : ''}</td><td>${h(p.l.lado || '')}</td><td style="font-size:12.5px">${h(p.formula)}</td><td class="n">${nf(p.qtd)}</td><td style="font-size:12.5px;color:var(--er)">${p.av.map(h).join('<br>')}</td></tr>`).join('')}</tbody></table></div>
     <div class="bar" style="margin-top:12px"><span class="sp"></span><button class="pri" id="avGo"><i class="ti ti-upload"></i>Importar ${plano.filter(p => p.acao === 'importar').length} linha(s)</button></div></div>`;
     $('#avGo').onclick = async () => {
       const bt = $('#avGo'); bt.disabled = true;
-      const rows = plano.filter(p => p.acao === 'importar').map(p => ({ obra_id: S.obra.id, data: p.data, orcamento_item_id: p.it.id, local: p.local, est_ini_int: p.l.est_ini_int, est_ini_frac: p.l.est_ini_frac, est_fim_int: p.l.est_fim_int, est_fim_frac: p.l.est_fim_frac, lado: p.l.lado, comprimento: p.comp ?? null, largura: p.l.largura, espessura: p.l.espessura, n_viagens: p.l.n_viagens, cap_viagem: p.l.cap_viagem, quantidade: p.qtd, formula: p.formula, camada: p.camada, observacao: p.obs }));
+      const rows = plano.filter(p => p.acao === 'importar').map(p => ({ origem: 'ficha', obra_id: S.obra.id, data: p.data, orcamento_item_id: p.it.id, local: p.local, est_ini_int: p.l.est_ini_int, est_ini_frac: p.l.est_ini_frac, est_fim_int: p.l.est_fim_int, est_fim_frac: p.l.est_fim_frac, lado: p.l.lado, comprimento: p.comp ?? null, largura: p.l.largura, espessura: p.l.espessura, n_viagens: p.l.n_viagens, cap_viagem: p.l.cap_viagem, quantidade: p.qtd, formula: p.formula, camada: p.camada, observacao: p.obs }));
       try { for (let i = 0; i < rows.length; i += 200) await q(sb.from('memoria_calculo').insert(rows.slice(i, i + 200))); toast(`${rows.length} avanço(s) lançado(s) na memória de cálculo`, 'ok'); $('#avPrev').insertAdjacentHTML('afterbegin', `<div class="card" style="border-color:#BFE3CF"><h3>${rows.length} linha(s) importada(s)</h3><p class="muted">Confira no Quadro do mês e na Memória de cálculo diária.</p></div>`); }
       catch (x) { erro(x); bt.disabled = false; }
     };

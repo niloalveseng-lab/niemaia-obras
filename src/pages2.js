@@ -56,7 +56,7 @@ async function rdoEditor(id, dataNova) {
   ];
   el.innerHTML = `<div class="bar"><button id="voltar">Voltar à lista</button><h1 style="margin:0 8px">RDO ${dt(r.data)}</h1>${badge(r.status, L.status_rdo)}<span class="sp"></span><span class="muted">${r.criador ? 'Lançado por ' + h(r.criador.nome) : ''}${r.aprovador ? ' · aprovado por ' + h(r.aprovador.nome) + ' em ' + new Date(r.aprovado_em).toLocaleString('pt-BR') : ''}</span></div>
   <div class="card"><div class="form" id="cab">${C.map(c => campoHtml(c, r[c.k])).join('')}</div></div>
-  <div class="card"><h3 style="margin-top:0">Serviços executados</h3><p class="muted">Quantidade calculada automaticamente (comprimento × largura) para itens em m². A produção oficial é a memória de cálculo: use o botão "Lançar serviços na memória de cálculo" ou lance direto em Produção mensal. CBUQ: lance em Produção CBUQ, com o ticket da balança.</p><div id="gS"></div></div>
+  <div class="card"><h3 style="margin-top:0">Serviços executados</h3><p class="muted">Ao aprovar o RDO, os serviços com item e na unidade do orçamento entram sozinhos na memória de cálculo (produção, % físico e medição). Quantidade calculada automaticamente (comprimento × largura) para itens em m². A produção oficial é a memória de cálculo: use o botão "Lançar serviços na memória de cálculo" ou lance direto em Produção mensal. CBUQ: lance em Produção CBUQ, com o ticket da balança.</p><div id="gS"></div></div>
   <div class="g2"><div class="card"><h3 style="margin-top:0">Efetivo</h3><div id="gE"></div><p class="muted" id="totE"></p></div>
   <div class="card"><h3 style="margin-top:0">Equipamentos</h3><div id="gQ"></div></div></div>
   ${id ? '<div class="card"><h3 style="margin-top:0">Documento do RDO (PDF / Word)</h3><div id="rdoAnexo" class="bar" style="margin:0"></div></div>' : ''}
@@ -122,14 +122,6 @@ async function rdoEditor(id, dataNova) {
     if (r.status === 'enviado') b('Devolver para correção', 'er', () => modal('Devolver RDO', '<label for="mot">Motivo</label><textarea id="mot"></textarea>', [{ t: 'Devolver', c: 'pri', f: async o => { const m = $('#mot', o).value.trim(); if (!m) throw new Error('Informe o motivo.'); await q(sb.from('rdo').update({ status: 'devolvido', ocorrencias: [r.ocorrencias, `[Devolvido em ${dt(hoje())}: ${m}]`].filter(Boolean).join('\n') }).eq('id', id)); rdoEditor(id); } }]));
     if (r.status === 'aprovado') b('Reabrir para edição', '', async () => { await q(sb.from('rdo').update({ status: 'rascunho' }).eq('id', id)); rdoEditor(id); });
   }
-  if (id && pode('campo') && !ro) b('Lançar serviços na memória de cálculo', '', async () => {
-    const sv = (await q(sb.from('rdo_servicos').select('*').eq('rdo_id', id))).filter(s => s.orcamento_item_id && s.quantidade);
-    if (!sv.length) return toast('Salve o RDO com serviços vinculados a item do orçamento e com quantidade.');
-    const its = Object.fromEntries(itens.map(i => [i.id, i]));
-    await q(sb.from('memoria_calculo').delete().eq('rdo_id', id));
-    await q(sb.from('memoria_calculo').insert(sv.map(s => { const [ii, fi] = parseEst(s.estaca_ini), [ie, fe] = parseEst(s.estaca_fim); const l = { est_ini_int: ii, est_ini_frac: fi, est_fim_int: ie, est_fim_frac: fe, lado: s.lado, comprimento: s.comprimento, largura: s.largura, quantidade: Number(s.quantidade) }; return { obra_id: S.obra.id, data: r.data, rdo_id: id, orcamento_item_id: s.orcamento_item_id, local: s.local, ...l, observacao: s.observacao, formula: calcMemoria(l, its[s.orcamento_item_id]).formula || `${nf(s.quantidade)} ${s.unidade || ''}` }; })));
-    toast(`${sv.length} serviço(s) lançado(s) na memória de ${dt(r.data)}`, 'ok');
-  });
   if (id) b('PDF do RDO', '', async () => { const P = pdfNovo(`Relatório Diário de Obra – ${dt(r.data)}`); rdoPdf(P, D); if (D.fotos.length) await fotosPdf(P, D.fotos); P.salvar(`RDO_${r.data}`); });
   if (id && pode('aprovar') && (r.status !== 'aprovado' || S.perfil === 'admin')) b('Excluir RDO', 'er', () => confirma(`Excluir o RDO de ${dt(r.data)} com todos os lançamentos?`, async () => { await q(sb.from('rdo').delete().eq('id', id)); toast('RDO excluído'); location.hash = '#rdo'; rotear(); }));
   $('#voltar').onclick = () => rotear();
@@ -233,7 +225,7 @@ async function pgEquip(el) {
     { t: 'Indicadores de horas', f: c => indicadoresEquip(c) }
   ];
   if (pode('custos')) ab.splice(1, 0, { t: 'Custo horário', f: c => crud(c, { table: 'equipamentos_custo', pk: 'equipamento_id', title: 'Custo horário dos equipamentos', doc: 'CUSTO_EQUIP', order: 'equipamento_id', write: 'custos',
-    cols: [{ k: 'equipamento_id', l: 'Equipamento', t: 'ref', ref: 'equip', req: true, w: 'w2' }, { k: 'custo_hora', l: 'Custo hora (R$)', t: 'money' }, { k: 'custo_mensal', l: 'Custo mensal (R$)', t: 'money', sum: true }, { k: 'franquia_horas_mes', l: 'Franquia (h/mês)', t: 'num', d: 1 }] }) });
+    cols: [{ k: 'equipamento_id', l: 'Equipamento', t: 'ref', ref: 'equip', req: true, w: 'w2' }, { k: 'custo_hora', l: 'Custo hora (R$)', t: 'money', dica: 'Sem combustível: o diesel entra pelos abastecimentos' }, { k: 'custo_mensal', l: 'Custo mensal (R$)', t: 'money', sum: true }, { k: 'franquia_horas_mes', l: 'Franquia (h/mês)', t: 'num', d: 1 }] }) });
   abas(el, ab);
 }
 async function horasEquip(ini, fim) {
@@ -286,19 +278,20 @@ async function pgMaoObra(el) {
 async function pgCustos(el) {
   abas(el, [
     { t: 'Lançamentos', f: c => crud(c, { table: 'custos', title: 'Custos da obra', doc: 'CUSTOS', order: 'data', asc: false, write: 'custos', paisagem: true, anexo: { bucket: 'comprovantes' },
-      cols: [{ k: 'data', l: 'Data', t: 'date', req: true, def: hoje() }, { k: 'categoria', l: 'Categoria', t: 'sel', o: L.categoria, req: true }, { k: 'orcamento_item_id', l: 'Item do orçamento', t: 'ref', ref: 'item', w: 'w2' }, { k: 'descricao', l: 'Descrição', req: true, w: 'w2' },
+      cols: [{ k: 'data', l: 'Data', t: 'date', req: true, def: hoje() }, { k: 'categoria', l: 'Categoria', t: 'sel', o: CAT_LANC, req: true }, { k: 'orcamento_item_id', l: 'Item do orçamento', t: 'ref', ref: 'item', w: 'w2' }, { k: 'descricao', l: 'Descrição', req: true, w: 'w2' },
         { k: 'fornecedor', l: 'Fornecedor' }, { k: 'documento', l: 'NF / recibo' }, { k: 'quantidade', l: 'Qtd', t: 'num' }, { k: 'unidade', l: 'Un' }, { k: 'valor', l: 'Valor (R$)', t: 'money', req: true, sum: true }, { k: 'cmp', l: 'Comprov.', listOnly: true, html: true, noExp: true, v: r => r.anexo_caminho ? '<i class="ti ti-paperclip" title="Comprovante anexado"></i>' : '' }, { k: 'observacao', l: 'Observação', t: 'area', w: 'wf', formOnly: true }] }) },
     { t: 'Alimentação, alojamento e transporte', f: apoioLanc },
     { t: 'Importar comprovantes', f: apoioImportar },
     { t: 'Resumo do apoio', f: apoioResumo },
     { t: 'Custo × executado', f: async c => {
-      const [cs, it] = await Promise.all([q(sb.from('custos').select('*').eq('obra_id', S.obra.id)), q(sb.from('vw_itens_saldo').select('*').eq('obra_id', S.obra.id).order('ordem'))]);
+      const [cs, it] = await Promise.all([q(sb.from('vw_custo_real').select('*').eq('obra_id', S.obra.id)), q(sb.from('vw_itens_saldo').select('*').eq('obra_id', S.obra.id).order('ordem'))]);
       const cat = Object.keys(L.categoria).map(k => [L.categoria[k], soma(cs.filter(x => x.categoria === k), x => x.valor)]).filter(x => x[1]);
       const meses = [...new Set(cs.map(x => x.data.slice(0, 7)))].sort();
       const porItem = it.map(i => { const cu = soma(cs.filter(x => x.orcamento_item_id === i.id), x => x.valor); const ex = Math.min(Number(i.qtd_executada) || 0, i.qtd_contratada ?? Infinity) * (Number(i.preco_unitario) || 0); return [i.descricao, i.unidade, Number(i.qtd_executada) || 0, ex, cu, ex - cu, ex ? 100 * (ex - cu) / ex : null]; }).filter(x => x[3] || x[4]);
       const semItem = soma(cs.filter(x => !x.orcamento_item_id), x => x.valor);
+      const auto = o2 => soma(cs.filter(x => x.origem === o2), x => x.valor);
       const hI = ['Item', 'Un', 'Qtd executada', 'Valor executado (R$)', 'Custo (R$)', 'Resultado (R$)', 'Margem %'];
-      c.innerHTML = `<div class="g2"><div class="card"><h3 style="margin-top:0">Por categoria</h3><table class="grid">${cat.map(x => `<tr><td>${x[0]}</td><td class="n">${brl(x[1])}</td></tr>`).join('')}<tfoot><tr><td>Total</td><td class="n">${brl(soma(cs, x => x.valor))}</td></tr></tfoot></table></div>
+      c.innerHTML = `<p class="muted">Custo real = lançamentos + máquinas (horas do RDO × custo horário, sem combustível) ${brl(auto('rdo'))} + diesel dos abastecimentos ${brl(auto('abastecimento'))}. Não lance de novo notas de diesel nem horas de máquina em Lançamentos.</p><div class="g2"><div class="card"><h3 style="margin-top:0">Por categoria</h3><table class="grid">${cat.map(x => `<tr><td>${x[0]}</td><td class="n">${brl(x[1])}</td></tr>`).join('')}<tfoot><tr><td>Total</td><td class="n">${brl(soma(cs, x => x.valor))}</td></tr></tfoot></table></div>
       <div class="card"><h3 style="margin-top:0">Por mês</h3><table class="grid">${meses.map(m => `<tr><td>${m.slice(5)}/${m.slice(0, 4)}</td><td class="n">${brl(soma(cs.filter(x => x.data.startsWith(m)), x => x.valor))}</td></tr>`).join('') || '<tr><td class="vazio">Sem custos.</td></tr>'}</table></div></div>
       <div class="card"><div class="bar"><h3 style="margin:0">Custo × valor executado por item</h3><span class="sp"></span><button id="cx">Excel</button></div><div class="tw"><table class="grid"><thead><tr>${hI.map((x, i) => `<th class="${i > 1 ? 'n' : ''}">${x}</th>`).join('')}</tr></thead><tbody>${porItem.map(r => `<tr><td>${h(r[0])}</td><td>${h(r[1])}</td><td class="n">${nf(r[2])}</td><td class="n">${brl(r[3])}</td><td class="n">${brl(r[4])}</td><td class="n">${brl(r[5])}</td><td class="n">${pct(r[6])}</td></tr>`).join('') || `<tr><td colspan="7" class="vazio">Vincule os custos aos itens do orçamento para ver o resultado por item.</td></tr>`}</tbody></table></div><p class="muted">Custos sem item vinculado (indiretos): ${brl(semItem)}.</p></div>`;
       $('#cx').onclick = () => xlsxExport('CUSTO_X_EXEC', 'Custo x valor executado', hI, porItem, { fmt: [null, null, '#,##0.00', '"R$" #,##0.00', '"R$" #,##0.00', '"R$" #,##0.00', '0.0'] });

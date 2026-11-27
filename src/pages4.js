@@ -113,6 +113,7 @@ function celulaMemoria(iid, d, D, depois) {
   box.onclick = e => { const b = e.target.dataset.m; if (b) { o.remove(); formMemoria(ls.find(m => m.id === b), null, depois); } };
 }
 async function formMemoria(row, pre, depois) {
+  if (row && row.origem === 'rdo') { modal('Lançamento do RDO', `<p>Esta linha veio do RDO aprovado de ${dt(row.data)}: <b>${h(row.formula || '')}</b>.</p><p class="muted">Para corrigir, altere o serviço no RDO (o gestor reabre ou edita o RDO aprovado); a memória se atualiza sozinha.</p>`); return; }
   const itens = await refItens(); const itMap = Object.fromEntries(itens.map(i => [i.id, i]));
   const frentes = (await q(sb.from('eap_atividades').select('nome,frente').eq('obra_id', S.obra.id))).map(a => a.nome);
   const C = [{ k: 'data', l: 'Data', t: 'date', req: true }, { k: 'orcamento_item_id', l: 'Item do orçamento', t: 'ref', req: true, w: 'wf' }, { k: 'local', l: 'Rua / frente / trecho', w: 'w2', list: frentes },
@@ -143,18 +144,20 @@ async function formMemoria(row, pre, depois) {
 }
 async function memoriaDia(c) {
   c.innerHTML = `<div class="bar"><label>Dia <input type="date" id="md" value="${DIA_SEL}" style="width:auto"></label><button id="mdA">◀</button><button id="mdP">▶</button><span class="sp"></span>${pode('campo') ? '<button class="pri" id="mdS">Salvar o dia</button>' : ''}<button id="mdX">Memória do mês (Excel)</button><button id="mdF">Memória do mês (PDF)</button></div>
-  <p class="muted">Uma linha por trecho executado. Comprimento sai das estacas (20 m) e a quantidade sai da unidade do item: m = comprimento; m² = comprimento × largura; m³ = viagens × capacidade ou comp. × larg. × esp.; t = comp. × larg. × esp. × 2,40. O quadro do mês soma tudo automaticamente. CBUQ com ticket: lance em Produção CBUQ.</p><div id="mdG"></div><p class="muted" id="mdT"></p>`;
+  <p class="muted">Uma linha por trecho executado. Comprimento sai das estacas (20 m) e a quantidade sai da unidade do item: m = comprimento; m² = comprimento × largura; m³ = viagens × capacidade ou comp. × larg. × esp.; t = comp. × larg. × esp. × 2,40. O quadro do mês soma tudo automaticamente. CBUQ com ticket: lance em Produção CBUQ.</p><div id="mdR"></div><div id="mdG"></div><p class="muted" id="mdT"></p>`;
   const itens = await refItens(); const itMap = Object.fromEntries(itens.map(i => [i.id, i]));
-  let G, linhasDb = [];
+  let G, linhasDb = [], doRdo = [];
   const defs = [{ k: 'orcamento_item_id', l: 'Item', t: 'sel', o: itens.map(i => [i.id, `${i.codigo || i.item || ''} ${i.descricao} (${i.unidade})`]) }, { k: 'local', l: 'Rua / trecho', w: 140 },
     { k: 'est_ini_int', l: 'Est. ini.', t: 'num', w: 55 }, { k: 'est_ini_frac', l: '+ frac', t: 'num', w: 55 }, { k: 'est_fim_int', l: 'Est. fim', t: 'num', w: 55 }, { k: 'est_fim_frac', l: '+ frac', t: 'num', w: 55 },
     { k: 'lado', l: 'Lado', t: 'sel', o: Object.entries(L.lado) }, { k: 'comprimento', l: 'Compr. (m)', t: 'num', w: 70 }, { k: 'largura', l: 'Larg. (m)', t: 'num', w: 60 }, { k: 'espessura', l: 'Esp. (m)', t: 'num', w: 55 },
     { k: 'n_viagens', l: 'Viagens', t: 'num', w: 55 }, { k: 'cap_viagem', l: 'm³/viag.', t: 'num', w: 55 }, { k: 'quantidade', l: 'Quantidade', t: 'num', w: 85 }, { k: 'camada', l: 'Camada', w: 80 }, { k: 'observacao', l: 'Obs.', w: 120 }];
   const ro = !pode('campo');
-  const tot = () => { const a = G.get(); const by = {}; a.forEach(l => { if (l.orcamento_item_id) by[l.orcamento_item_id] = (by[l.orcamento_item_id] || 0) + (Number(l.quantidade) || 0); }); $('#mdT').innerHTML = Object.entries(by).map(([k, v]) => `${h(itMap[k] ? itMap[k].descricao : '')}: <b>${nf(v)} ${h(itMap[k] ? itMap[k].unidade : '')}</b>`).join(' · ') || 'Sem lançamentos no dia.'; };
+  const tot = () => { const a = [...G.get(), ...doRdo]; const by = {}; a.forEach(l => { if (l.orcamento_item_id) by[l.orcamento_item_id] = (by[l.orcamento_item_id] || 0) + (Number(l.quantidade) || 0); }); $('#mdT').innerHTML = Object.entries(by).map(([k, v]) => `${h(itMap[k] ? itMap[k].descricao : '')}: <b>${nf(v)} ${h(itMap[k] ? itMap[k].unidade : '')}</b>`).join(' · ') || 'Sem lançamentos no dia.'; };
   const carregar = async () => {
     DIA_SEL = $('#md').value || hoje();
-    linhasDb = await q(sb.from('memoria_calculo').select('*').eq('obra_id', S.obra.id).eq('data', DIA_SEL).order('criado_em'));
+    const todas = await q(sb.from('memoria_calculo').select('*').eq('obra_id', S.obra.id).eq('data', DIA_SEL).order('criado_em'));
+    doRdo = todas.filter(x => x.origem === 'rdo'); linhasDb = todas.filter(x => x.origem !== 'rdo');
+    $('#mdR').innerHTML = doRdo.length ? `<div class="card" style="background:var(--sup2)"><b>Do RDO aprovado (${doRdo.length})</b> <span class="muted">– altere pelo RDO; aqui é só leitura</span><ul style="margin:6px 0 0;padding-left:18px">${doRdo.map(x => `<li>${h(itMap[x.orcamento_item_id] ? (itMap[x.orcamento_item_id].item || '') + ' ' + itMap[x.orcamento_item_id].descricao.slice(0, 50) : '')}: ${h(x.formula || nf(x.quantidade))}</li>`).join('')}</ul></div>` : '';
     G = grade($('#mdG'), defs, linhasDb.map(x => ({ ...x })), ro, (l, k) => {
       if (['quantidade', 'local', 'camada', 'observacao'].includes(k)) { setTimeout(tot); return false; }
       const r = calcMemoria(l, itMap[l.orcamento_item_id]); let mud = false;

@@ -45,7 +45,7 @@ const L = {
   propriedade: { proprio: 'Próprio', locado: 'Locado', terceiro_producao: 'Terceiro (produção)' },
   status_eq: { operando: 'Operando', parado: 'Parado', manutencao: 'Em manutenção', mobilizacao: 'Mobilização', desmobilizado: 'Desmobilizado' },
   manut: { preventiva: 'Preventiva', corretiva: 'Corretiva' },
-  categoria: { mao_de_obra: 'Mão de obra', equipamento: 'Equipamento', material: 'Material', terceiros: 'Terceiros', administracao: 'Administração local', alimentacao: 'Alimentação', alojamento: 'Alojamento', transporte: 'Transporte', outros: 'Outros' },
+  categoria: { mao_de_obra: 'Mão de obra', equipamento: 'Equipamento', material: 'Material', terceiros: 'Terceiros', administracao: 'Administração local', alimentacao: 'Alimentação', alojamento: 'Alojamento', transporte: 'Transporte', combustivel: 'Combustível (abastecimentos)', outros: 'Outros' },
   apoio: { alimentacao: 'Alimentação', alojamento: 'Alojamento', transporte: 'Transporte' },
   pagamento: { pix: 'PIX', dinheiro: 'Dinheiro', cartao_empresa: 'Cartão da empresa', boleto: 'Boleto', faturado: 'Faturado (a prazo)', transferencia: 'Transferência', reembolso: 'Reembolso a colaborador' },
   mov: { pedido: 'Pedido', entrada: 'Entrada', saida: 'Saída' },
@@ -348,6 +348,8 @@ async function formCrud(cfg, row, depois, canW) {
 }
 /* dias (seg–sáb, até ontem) sem RDO nos últimos DIAS_RDO dias, a partir do início da obra ou do 1º RDO; regra única do painel e das pendências */
 const DIAS_RDO = 15;
+/* categorias que podem ser lançadas à mão (combustível vem só dos abastecimentos) */
+const CAT_LANC = Object.fromEntries(Object.entries(L.categoria).filter(([k]) => k !== 'combustivel'));
 function diasSemRdo(datas, inicioObra) {
   const tem = new Set(datas); const ini = [inicioObra, [...tem].sort()[0]].filter(Boolean).sort()[0]; if (!ini) return [];
   const out = []; for (let d = addDias(hoje(), -DIAS_RDO); d < hoje(); d = addDias(d, 1)) if (d >= ini && new Date(d + 'T12:00:00').getDay() !== 0 && !tem.has(d)) out.push(d);
