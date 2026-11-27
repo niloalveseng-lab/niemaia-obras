@@ -343,6 +343,12 @@ async function formCrud(cfg, row, depois, canW) {
   } });
   modal((row ? (canW ? 'Editar' : 'Ver') : 'Novo') + ' – ' + cfg.title, box, bt);
 }
+/* gráficos: se a biblioteca não carregar (sem sinal), mostra aviso e o resto da tela segue funcionando */
+function grafico(canvas, cfg) {
+  if (!canvas) return null;
+  if (!window.Chart) { const p = canvas.parentNode; if (p) p.innerHTML = '<p class="muted">Gráfico indisponível: a biblioteca de gráficos não carregou (verifique a conexão e recarregue).</p>'; return null; }
+  const ch = new Chart(canvas, cfg); S.charts.push(ch); return ch;
+}
 /* comprovantes / anexos de registros */
 async function subirAnexo(bucket, tabela, id, file, obraId) {
   let blob = file, ext = (file.name.split('.').pop() || 'bin').toLowerCase(), tipo = file.type || undefined;

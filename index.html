@@ -572,6 +572,12 @@ async function formCrud(cfg, row, depois, canW) {
   } });
   modal((row ? (canW ? 'Editar' : 'Ver') : 'Novo') + ' – ' + cfg.title, box, bt);
 }
+/* gráficos: se a biblioteca não carregar (sem sinal), mostra aviso e o resto da tela segue funcionando */
+function grafico(canvas, cfg) {
+  if (!canvas) return null;
+  if (!window.Chart) { const p = canvas.parentNode; if (p) p.innerHTML = '<p class="muted">Gráfico indisponível: a biblioteca de gráficos não carregou (verifique a conexão e recarregue).</p>'; return null; }
+  const ch = new Chart(canvas, cfg); S.charts.push(ch); return ch;
+}
 /* comprovantes / anexos de registros */
 async function subirAnexo(bucket, tabela, id, file, obraId) {
   let blob = file, ext = (file.name.split('.').pop() || 'bin').toLowerCase(), tipo = file.type || undefined;
@@ -845,13 +851,13 @@ function curvaS(D, K) {
     return 100 * soma(itens, i => (K.temPreco ? i.valor_contratado : 1) * Math.min(1, (acc[i.id] || 0) / i.qtd_contratada)) / sw;
   });
   const pEap = pts.map(x => x === hoje() ? K.fisEap : null);
-  S.charts.push(new Chart($('#cS'), {
+  grafico($('#cS'), {
     type: 'line', data: { labels: pts.map(dt), datasets: [
       { label: 'Planejado (EAP)', data: prev, borderColor: '#57585A', borderDash: [5, 4], pointRadius: 0, tension: .25 },
       { label: 'Executado (itens do orçamento)', data: real, borderColor: '#EE5A1B', backgroundColor: '#EE5A1B', pointRadius: 0, tension: .25, spanGaps: true },
       { label: 'Realizado EAP (hoje)', data: pEap, borderColor: '#1d5fa8', backgroundColor: '#1d5fa8', pointRadius: 6, showLine: false }
     ] }, options: { maintainAspectRatio: false, scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } }, plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${nf(c.parsed.y, 1)}%` } } } }
-  }));
+  });
   $('#cSm').textContent = 'Planejado: distribuição linear das atividades da EAP entre início e fim previstos. Executado: memória de cálculo diária e produção de CBUQ sobre o contratado.';
 }
 function histograma(D, cid) {
@@ -862,12 +868,12 @@ function histograma(D, cid) {
   if (meses.length) { datas.push(meses[0] + '-01'); const u = meses[meses.length - 1]; const f = new Date(+u.slice(0, 4), +u.slice(5, 7), 0).toISOString().slice(0, 10); datas.push(f); }
   datas.sort(); if (!datas.length) { $('#' + cid).parentNode.innerHTML = '<p class="muted">Sem efetivo lançado no RDO nem histograma previsto (Planejamento).</p>'; return; }
   const lab = []; for (let d = datas[0]; d <= datas[datas.length - 1]; d = addDias(d, 1)) lab.push(d);
-  S.charts.push(new Chart($('#' + cid), {
+  grafico($('#' + cid), {
     data: { labels: lab.map(dt), datasets: [
       { type: 'bar', label: 'Efetivo real (RDO)', data: lab.map(d => porDia[d] ?? null), backgroundColor: '#EE5A1B' },
       { type: 'line', label: 'Previsto', data: lab.map(d => prevMes[d.slice(0, 7)] ?? null), borderColor: '#57585A', borderDash: [5, 4], pointRadius: 0, stepped: true }
     ] }, options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: 'pessoas' } } } }
-  }));
+  });
 }
 
 /* ================= OBRAS ================= */
