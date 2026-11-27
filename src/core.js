@@ -315,8 +315,13 @@ function lerCampos(box, campos) {
     if (['num', 'money'].includes(c.t)) v = v === '' ? null : Number(v);
     else if (c.t !== 'bool' && v === '') v = null;
     if (c.req && (v === null || v === '')) throw new Error(`Preencha o campo "${c.l}".`);
+    if (['num', 'money'].includes(c.t) && v !== null && (isNaN(v) || (!c.neg && v < 0))) { e.focus(); throw new Error(`"${c.l}" precisa ser um número${c.neg ? '' : ' maior ou igual a zero'}.`); }
+    if (c.t === 'email' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { e.focus(); throw new Error(`E-mail inválido em "${c.l}".`); }
     o[c.k] = v;
   }
+  /* datas em par: fim não pode ser antes do início */
+  for (const [a, b] of [['inicio_previsto', 'fim_previsto'], ['inicio_real', 'fim_real'], ['periodo_inicio', 'periodo_fim'], ['data', 'periodo_fim']])
+    if (o[a] && o[b] && o[b] < o[a]) throw new Error('A data final não pode ser anterior à inicial.');
   return o;
 }
 async function formCrud(cfg, row, depois, canW) {
