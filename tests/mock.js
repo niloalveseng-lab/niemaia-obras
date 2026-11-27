@@ -58,7 +58,7 @@ const FN=[];
 const mock = {
   functions: { invoke: async (n, o) => { FN.push(o.body); return { data: { ok: true }, error: null }; } },
   from: builder, rpc: async () => ({ data: 'admin', error: null }),
-  auth: { getSession: async () => ({ data: { session: { user: { id: 'u1' } } } }), onAuthStateChange() { }, signOut: async () => ({}) },
+  auth: { resetPasswordForEmail: async () => ({ data: {}, error: null }), signInWithPassword: async () => ({ data: {}, error: null }), getSession: async () => ({ data: { session: { user: { id: 'u1' } } } }), onAuthStateChange() { }, signOut: async () => ({}) },
   storage: { from: () => ({ createSignedUrls: async (p) => ({ data: p.map(x => ({ signedUrl: 'x' })), error: null }), createSignedUrl: async () => ({ data: { signedUrl: 'x' }, error: null }), upload: async () => ({ data: {}, error: null }), remove: async () => ({ data: {}, error: null }) }) }
 };
 

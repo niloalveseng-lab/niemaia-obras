@@ -409,25 +409,109 @@ function abas(el, lista, ini) {
 }
 
 /* ---------- autenticação e estrutura ---------- */
+/* ================= PÁGINA DE ENTRADA =================
+   Prancha de projeto viário: eixo traçado com bordos e estacas, faixas diagonais da marca e carimbo.
+   Movimento único por visita (coreografia em CSS); troca de modo só no formulário. */
+const LOGIN_TXT = {
+  entrar: { h: 'Entrar', p: 'Use o e-mail e a senha cadastrados pelo administrador.', bt: 'Entrar', ld: 'Entrando…' },
+  senha: { h: 'Recuperar senha', p: 'Enviaremos um link para cadastrar uma nova senha.', bt: 'Enviar link', ld: 'Enviando…' },
+  criar: { h: 'Criar conta', p: 'Depois de criar, o administrador libera as obras.', bt: 'Criar conta', ld: 'Criando…' }
+};
+function loginCampos(modo) {
+  const t = LOGIN_TXT[modo];
+  return `<h1>${t.h}</h1><p class="muted lsub">${t.p}</p>
+  ${modo === 'criar' ? '<div><label for="ln">Nome completo</label><input id="ln" required autocomplete="name"></div>' : ''}
+  <div><label for="le">E-mail</label><input id="le" type="email" required autocomplete="email" inputmode="email" spellcheck="false"></div>
+  ${modo !== 'senha' ? `<div><label for="ls">Senha</label><input id="ls" type="password" required minlength="6" autocomplete="${modo === 'criar' ? 'new-password' : 'current-password'}"></div>` : ''}
+  <button class="pri lbt"><span class="lbt-c">${t.bt}</span></button>
+  <div class="lrod">${modo !== 'entrar' ? '<button type="button" class="lk" data-m="entrar">Voltar para entrar</button>' : '<span class="muted">Acesso cadastrado pelo administrador.</span><button type="button" class="lk" data-m="senha">Esqueci a senha</button>'}</div>
+  <p class="lmsg" role="status" aria-live="polite"></p>`;
+}
+/* desenho do eixo: amostra a curva, gera bordos (normais) e marcações de estaca */
+function plantaSvg() {
+  const W = 1000, H = 720, NS = 'http://www.w3.org/2000/svg';
+  const eixo = 'M -60 330 C 150 330 260 225 450 205 S 760 150 860 85 S 990 -5 1100 -25';
+  const tmp = document.createElementNS(NS, 'svg'); tmp.setAttribute('width', 0); tmp.setAttribute('height', 0); tmp.style.position = 'absolute';
+  const p = document.createElementNS(NS, 'path'); p.setAttribute('d', eixo); tmp.appendChild(p); document.body.appendChild(tmp);
+  const L = p.getTotalLength(), pt = s => p.getPointAtLength(Math.max(0, Math.min(L, s)));
+  const nrm = s => { const a = pt(s - 1), b = pt(s + 1), dx = b.x - a.x, dy = b.y - a.y, m = Math.hypot(dx, dy) || 1; return [-dy / m, dx / m]; };
+  const pts = off => { const r = []; for (let s = 0; s <= L; s += 8) { const q = pt(s), [nx, ny] = nrm(s); r.push([(q.x + nx * off).toFixed(1), (q.y + ny * off).toFixed(1)]); } return r; };
+  const linha = a => a.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${q[1]}`).join('');
+  const bordo = off => linha(pts(off));
+  let ticks = '', rotulos = ''; const passo = 46, ini = 110;
+  for (let s = ini, k = 0; s < L - 40; s += passo, k++) {
+    const q = pt(s), [nx, ny] = nrm(s), g = k % 5 === 0 ? 30 : 18;
+    ticks += `M${(q.x - nx * g).toFixed(1)} ${(q.y - ny * g).toFixed(1)}L${(q.x + nx * g).toFixed(1)} ${(q.y + ny * g).toFixed(1)}`;
+    if (k % 5 === 0 && q.x > 60 && q.x < W - 60 && q.y > 50) rotulos += `<text x="${(q.x + nx * 44).toFixed(0)}" y="${(q.y + ny * 44 + 4).toFixed(0)}">${k}+00</text>`;
+  }
+  tmp.remove();
+  return `<svg class="pl-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <path class="pl-faixa" d="${linha([...pts(-34), ...pts(34).reverse()])}Z"/>
+    <path class="pl-bordo" d="${bordo(-34)}"/><path class="pl-bordo" d="${bordo(34)}"/>
+    <path class="pl-off" d="${bordo(-58)}"/><path class="pl-off" d="${bordo(58)}"/>
+    <path class="pl-eixo" d="${eixo}"/><path class="pl-tick" d="${ticks}"/><g class="pl-rot">${rotulos}</g></svg>`;
+}
 function telaLogin(modo = 'entrar') {
   document.body.className = '';
-  $('#app').innerHTML = `<div class="login"><div class="lado"><h2>Gestão de obras de infraestrutura</h2><p>Diário de obra, produção, medição, equipamentos e custos num só lugar, com o padrão NIEMAIA em cada documento.</p><div class="tags">${S.obras.length ? '' : '<span>RUAS</span><span>ALÇA OESTE</span><span>POLO TURÍSTICO</span>'}</div></div>
-  <div class="frm"><form class="box"><img class="logo" src="${logoTema()}" alt="NIEMAIA Serviços e Equipamentos"><h1>${modo === 'criar' ? 'Criar conta' : modo === 'senha' ? 'Recuperar senha' : 'Entrar'}</h1><p class="muted" style="margin-top:2px">${modo === 'senha' ? 'Enviaremos um link para cadastrar a nova senha.' : 'Use seu e-mail e senha cadastrados.'}</p>
-  ${modo === 'criar' ? '<div><label for="ln">Nome completo</label><input id="ln" required autocomplete="name"></div>' : ''}
-  <div><label for="le">E-mail</label><input id="le" type="email" required autocomplete="email"></div>
-  ${modo !== 'senha' ? `<div><label for="ls">Senha</label><input id="ls" type="password" required minlength="6" autocomplete="${modo === 'criar' ? 'new-password' : 'current-password'}"></div>` : ''}
-  <button class="pri">${modo === 'criar' ? 'Criar conta' : modo === 'senha' ? 'Enviar link' : 'Entrar'}</button>
-  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">${modo !== 'entrar' ? '<button type="button" class="lk" data-m="entrar">Voltar para entrar</button>' : '<span class="muted">Acesso cadastrado pelo administrador.</span><button type="button" class="lk" data-m="senha">Esqueci a senha</button>'}</div>
-  <p class="muted msg"></p></form></div></div>`;
+  const ja = $('.login.entrada');
+  if (ja) return loginTrocar(modo);
+  const hj = new Date().toLocaleDateString('pt-BR');
+  $('#app').innerHTML = `<div class="login entrada">
+  <section class="prancha" aria-label="NIEMAIA – Gestão de Obras">
+    <div class="pl-grade" aria-hidden="true"></div>
+    <div class="pl-desenho">${plantaSvg()}</div>
+    <div class="pl-canto pl-c1" aria-hidden="true"><i></i><b></b></div><div class="pl-canto pl-c2" aria-hidden="true"><i></i><b></b></div>
+    <div class="pl-topo"><span>NIEMAIA</span><span>Gestão de obras</span></div>
+    <div class="pl-txt"><h2>Do canteiro<br>à medição.</h2><p>Diário de obra, produção, equipamentos, custos e medição das obras da NIEMAIA em Sousa/PB, no mesmo padrão no escritório e no celular.</p></div>
+    <dl class="pl-carimbo"><div><dt>Empresa</dt><dd>NIEMAIA Construções</dd></div><div><dt>Local</dt><dd>Sousa · PB</dd></div><div class="w"><dt>Obras</dt><dd>RUAS · ALÇA · POLO</dd></div><div><dt>Data</dt><dd>${hj}</dd></div><div><dt>Folha</dt><dd>01/01</dd></div></dl>
+  </section>
+  <div class="frm"><form class="box" novalidate><img class="logo" src="${logoTema()}" alt="NIEMAIA Serviços e Equipamentos"><div class="lcorpo">${loginCampos(modo)}</div></form>
+  <p class="lcopy">NIEMAIA Construções Ltda · Sousa/PB</p></div></div>`;
+  loginLigar(modo); loginParalaxe();
+}
+/* troca Entrar ↔ Recuperar senha só no formulário: crossfade curto com blur para disfarçar a troca */
+async function loginTrocar(modo) {
+  const c = $('.login .lcorpo'); if (!c) return;
+  const reduz = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduz && c.animate) await c.animate([{ opacity: 1, filter: 'blur(0)' }, { opacity: 0, filter: 'blur(2px)' }], { duration: 120, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'forwards' }).finished.catch(() => {});
+  c.innerHTML = loginCampos(modo); loginLigar(modo);
+  if (c.animate) c.animate(reduz ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, filter: 'blur(2px)', transform: 'translateY(4px)' }, { opacity: 1, filter: 'blur(0)', transform: 'none' }], { duration: 180, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'forwards' });
+  const f = $('#le'); if (f) f.focus({ preventScroll: true });
+}
+function loginLigar(modo) {
   $$('.login [data-m]').forEach(b => b.onclick = () => telaLogin(b.dataset.m));
-  $('.login form').onsubmit = async ev => {
-    ev.preventDefault(); const e = $('#le').value.trim(), s = $('#ls') && $('#ls').value, m = $('.login .msg');
+  const form = $('.login form'), bt = $('.login .lbt'), m = $('.login .lmsg'), t = LOGIN_TXT[modo];
+  const aviso = (txt, tipo) => { m.textContent = txt; m.className = 'lmsg ' + (tipo || ''); m.classList.remove('vis'); void m.offsetWidth; m.classList.add('vis');
+    if (tipo === 'erro' && !matchMedia('(prefers-reduced-motion: reduce)').matches && form.animate) form.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }], { duration: 320, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }); };
+  form.onsubmit = async ev => {
+    ev.preventDefault(); if (bt.disabled) return;
+    const e = $('#le').value.trim(), s = $('#ls') && $('#ls').value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { $('#le').focus(); return aviso('Informe um e-mail válido.', 'erro'); }
+    if (modo !== 'senha' && (!s || s.length < 6)) { $('#ls').focus(); return aviso('A senha tem pelo menos 6 caracteres.', 'erro'); }
+    bt.disabled = true; bt.classList.add('carregando'); bt.setAttribute('aria-busy', 'true'); $('.lbt-c', bt).textContent = t.ld; m.textContent = '';
     try {
-      if (modo === 'entrar') { await q(sb.auth.signInWithPassword({ email: e, password: s })); await iniciar(); }
-      else if (modo === 'criar') { const r = await q(sb.auth.signUp({ email: e, password: s, options: { data: { nome: $('#ln').value.trim() }, emailRedirectTo: location.href.split('#')[0] } })); if (r.session) await iniciar(); else m.textContent = 'Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre. O administrador libera o acesso às obras.'; }
-      else { await q(sb.auth.resetPasswordForEmail(e, { redirectTo: location.href.split('#')[0] })); m.textContent = 'Link enviado. Abra o e-mail para cadastrar a nova senha.'; }
-    } catch (x) { m.textContent = x.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : x.message === 'Email not confirmed' ? 'Confirme o e-mail pelo link recebido antes de entrar.' : x.message; }
+      if (modo === 'entrar') { await q(sb.auth.signInWithPassword({ email: e, password: s })); await iniciar(); return; }
+      if (modo === 'criar') { const r = await q(sb.auth.signUp({ email: e, password: s, options: { data: { nome: $('#ln').value.trim() }, emailRedirectTo: location.href.split('#')[0] } })); if (r.session) { await iniciar(); return; } aviso('Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre.', 'ok'); }
+      else { await q(sb.auth.resetPasswordForEmail(e, { redirectTo: location.href.split('#')[0] })); aviso('Link enviado. Abra o e-mail para cadastrar a nova senha.', 'ok'); }
+    } catch (x) {
+      const msg = String(x && x.message || x);
+      aviso(msg === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : msg === 'Email not confirmed' ? 'Confirme o e-mail pelo link recebido antes de entrar.' : /fetch|network|Failed/i.test(msg) ? 'Sem conexão com o servidor. Verifique a internet e tente de novo.' : /rate|too many/i.test(msg) ? 'Muitas tentativas. Aguarde um minuto e tente de novo.' : msg, 'erro');
+    }
+    if (bt.isConnected) { bt.disabled = false; bt.classList.remove('carregando'); bt.removeAttribute('aria-busy'); $('.lbt-c', bt).textContent = t.bt; }
   };
+}
+/* paralaxe decorativa da prancha: segue o mouse com amortecimento (só mouse e sem "reduzir movimento") */
+function loginParalaxe() {
+  if (!matchMedia('(hover: hover) and (pointer: fine)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const pr = $('.login .prancha'), d = $('.login .pl-desenho'), g = $('.login .pl-grade'); if (!pr || !d) return;
+  let alvo = [0, 0], atual = [0, 0], raf = 0;
+  const passo = () => {
+    atual = atual.map((v, i) => v + (alvo[i] - v) * 0.08);
+    d.style.transform = `translate3d(${atual[0] * 14}px, ${atual[1] * 10}px, 0)`; g.style.transform = `translate3d(${atual[0] * 5}px, ${atual[1] * 4}px, 0)`;
+    raf = Math.abs(alvo[0] - atual[0]) + Math.abs(alvo[1] - atual[1]) > 0.002 ? requestAnimationFrame(passo) : 0;
+  };
+  const mover = e => { if (!pr.isConnected) return window.removeEventListener('pointermove', mover); const r = pr.getBoundingClientRect(); alvo = [Math.max(-1, Math.min(1, (e.clientX - r.left) / r.width * 2 - 1)), Math.max(-1, Math.min(1, (e.clientY - r.top) / r.height * 2 - 1))]; if (!raf) raf = requestAnimationFrame(passo); };
+  window.addEventListener('pointermove', mover, { passive: true });
 }
 function trocarSenha() {
   modal('Cadastrar nova senha', '<div><label for="ns">Nova senha</label><input id="ns" type="password" minlength="6"></div>', [{ t: 'Salvar', c: 'pri', f: async o => { await q(sb.auth.updateUser({ password: $('#ns', o).value })); toast('Senha alterada', 'ok'); } }]);
