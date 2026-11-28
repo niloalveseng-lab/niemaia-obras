@@ -1,0 +1,6 @@
+-- 13 – abastecimentos.valor é coluna gerada (litros × coalesce(preco_litro,0)): sem preço vale 0.
+-- As views passam a usar o preço vigente da obra (diesel_precos) quando preco_litro é nulo.
+-- Aplicado em 28/11/2026 junto com: update abastecimentos set preco_litro = 7.30 where preco_litro is null (POLO, 72 linhas, 11/11 a 25/11)
+-- e diesel_precos POLO vigência 11/11/2026 = R$ 7,30.
+-- (texto completo das views: ver migração 13_diesel_valor_gerado no Supabase; mesma estrutura da 12, trocando
+--  coalesce(a.valor, ...) por: case when a.preco_litro is not null then a.valor else a.litros * preco_diesel(a.obra_id, a.data) end)

@@ -247,42 +247,48 @@ const L_COMB = { diesel_s10: 'Diesel S10', diesel_s500: 'Diesel S500', gasolina:
 let DIA_ABAST = hoje();
 async function abastecimentoDia(c) {
   const vc = pode('custos');
-  c.innerHTML = `<div class="bar"><label>Dia <input type="date" id="ad" value="${DIA_ABAST}" style="width:auto"></label><button id="adA">◀</button><button id="adP">▶</button><span class="sp"></span>${pode('campo') || S.perfil === 'almoxarife' ? '<button id="adF">Incluir toda a frota</button><button class="pri" id="adS">Salvar ficha</button>' : ''}<button id="adX">Excel</button><button id="adPdf">Ficha (PDF)</button></div>
-  <p class="muted">Uma linha por abastecimento. O horímetro informado atualiza o horímetro do equipamento. Consumo (l/h) = litros ÷ horas desde o abastecimento anterior com horímetro.</p><div id="adG"></div><div id="adR" style="margin-top:12px"></div>`;
+  c.innerHTML = `<div class="bar"><label>Dia <input type="date" id="ad" value="${DIA_ABAST}" style="width:auto"></label><button id="adA">◀</button><button id="adP">▶</button><label>Preço do litro (R$) <input type="text" inputmode="decimal" id="adPr" placeholder="7,30" style="width:90px"${pode('campo') || S.perfil === 'almoxarife' ? '' : ' disabled'}></label><span class="sp"></span>${pode('campo') || S.perfil === 'almoxarife' ? '<button id="adF">Incluir toda a frota</button><button class="pri" id="adS">Salvar ficha</button>' : ''}<button id="adX">Excel</button><button id="adPdf">Ficha (PDF)</button></div>
+  <p class="muted">Uma linha por abastecimento. O preço do litro vale para todas as linhas do dia${vc ? ' (uma linha com R$/litro próprio mantém o seu)' : ''} e entra no custo do diesel. O horímetro informado atualiza o horímetro do equipamento. Consumo (l/h) = litros ÷ horas desde o abastecimento anterior com horímetro.</p><div id="adG"></div><div id="adR" style="margin-top:12px"></div>`;
   const eqs = await refEquip(true); const eqMap = Object.fromEntries(eqs.map(e => [e.id, e]));
   let G, db = [], ant = {};
   const defs = [{ k: 'hora', l: 'Hora', w: 60 }, { k: 'equipamento_id', l: 'Equipamento (prefixo)', t: 'sel', o: eqs.map(e => [e.id, `${e.prefixo} – ${e.descricao}`]) }, { k: 'horimetro', l: 'Horímetro', t: 'num', w: 80 }, { k: 'odometro', l: 'Odômetro (km)', t: 'num', w: 80 },
     { k: 'combustivel', l: 'Combustível', t: 'sel', o: Object.entries(L_COMB) }, { k: 'litros', l: 'Litros', t: 'num', w: 70 }, ...(vc ? [{ k: 'preco_litro', l: 'R$/litro', t: 'num', w: 65 }] : []),
     { k: 'origem', l: 'Origem (melosa/posto)', w: 120, list: ['Melosa', 'Comboio', 'Posto', 'Tanque do canteiro'] }, { k: 'documento', l: 'Cupom / requisição', w: 90 }, { k: 'responsavel', l: 'Frentista / responsável', w: 120 }, { k: 'observacao', l: 'Obs.', w: 110 }];
   const ro = !(pode('campo') || S.perfil === 'almoxarife');
+  const precoDia = () => num($('#adPr').value);
+  const precoLinha = l => (vc && num(l.preco_litro) > 0 ? num(l.preco_litro) : precoDia());
   const resumo = () => {
     const a = G.get(); const porC = {}; a.forEach(l => { const k = l.combustivel || 'diesel_s10'; porC[k] = (porC[k] || 0) + (Number(l.litros) || 0); });
     const linhas = a.filter(l => l.equipamento_id).map(l => { const e = eqMap[l.equipamento_id]; const p = ant[l.equipamento_id]; const hrs = p && l.horimetro != null && p.horimetro != null ? l.horimetro - p.horimetro : null; return [e ? e.prefixo : '', e ? e.descricao : '', p ? `${dt(p.data)} · ${nf(p.horimetro, 1)}` : '–', nf(l.horimetro, 1), hrs != null ? nf(hrs, 1) : '–', nf(l.litros, 1), hrs > 0 ? nf(l.litros / hrs, 2) : '–']; });
-    $('#adR').innerHTML = `<div class="kpis">${Object.entries(porC).map(([k, v]) => `<div class="kpi"><span>${L_COMB[k]}</span><b>${nf(v, 1)} l</b></div>`).join('')}${vc ? `<div class="kpi"><span>Valor do dia</span><b>${brl(soma(a, l => (Number(l.litros) || 0) * (Number(l.preco_litro) || 0)))}</b></div>` : ''}</div>
+    $('#adR').innerHTML = `<div class="kpis">${Object.entries(porC).map(([k, v]) => `<div class="kpi"><span>${L_COMB[k]}</span><b>${nf(v, 1)} l</b></div>`).join('')}${vc ? `<div class="kpi"><span>Valor do dia</span><b>${brl(soma(a, l => (Number(l.litros) || 0) * (precoLinha(l) || 0)))}</b></div>` : ''}</div>
     <div class="card"><h3 style="margin-top:0">Consumo por equipamento</h3><div class="tw"><table class="grid"><thead><tr><th>Prefixo</th><th>Equipamento</th><th>Abastecimento anterior</th><th class="n">Horímetro</th><th class="n">Horas</th><th class="n">Litros</th><th class="n">l/h</th></tr></thead><tbody>${linhas.map(r => `<tr>${r.map((v, i) => `<td class="${i > 2 ? 'n' : ''}">${h(v)}</td>`).join('')}</tr>`).join('') || '<tr><td colspan="7" class="vazio">Sem abastecimentos no dia.</td></tr>'}</tbody></table></div></div>`;
   };
   const carregar = async () => {
     DIA_ABAST = $('#ad').value || hoje();
     db = await q(sb.from('abastecimentos').select('*').eq('obra_id', S.obra.id).eq('data', DIA_ABAST).order('hora'));
+    const pDb = db.map(x => num(x.preco_litro)).find(v => v > 0);
+    const vig = pDb ? null : (await q(sb.from('diesel_precos').select('preco_litro').eq('obra_id', S.obra.id).lte('vigencia', DIA_ABAST).order('vigencia', { ascending: false }).limit(1)).catch(() => []))[0];
+    $('#adPr').value = pDb || vig ? nf(pDb || vig.preco_litro, 2) : '';
     const prev = await q(sb.from('abastecimentos').select('equipamento_id,data,horimetro').eq('obra_id', S.obra.id).lt('data', DIA_ABAST).not('horimetro', 'is', null).order('data', { ascending: false }).limit(500));
     ant = {}; prev.forEach(p => { if (!ant[p.equipamento_id]) ant[p.equipamento_id] = p; });
     G = grade($('#adG'), defs, db.map(x => ({ ...x, hora: x.hora ? x.hora.slice(0, 5) : null })), ro, () => { setTimeout(resumo); return false; });
     resumo();
   };
   $('#ad').onchange = () => carregar().catch(erro);
+  $('#adPr').onchange = () => { const p = precoDia(); if (vc && p > 0) G.set(G.get().map(l => ({ ...l, preco_litro: p }))); resumo(); };
   $('#adA').onclick = () => { $('#ad').value = addDias($('#ad').value, -1); carregar().catch(erro); };
   $('#adP').onclick = () => { $('#ad').value = addDias($('#ad').value, 1); carregar().catch(erro); };
   if ($('#adF')) $('#adF').onclick = () => { const a = G.get(); const tem = new Set(a.map(l => l.equipamento_id)); G.set([...a, ...eqs.filter(e => !tem.has(e.id) && e.status !== 'desmobilizado').map(e => ({ equipamento_id: e.id, combustivel: 'diesel_s10' }))]); resumo(); };
   if ($('#adS')) $('#adS').onclick = async () => { try {
-    const a = G.get().filter(l => l.litros); const cols = ['hora', 'equipamento_id', 'horimetro', 'odometro', 'combustivel', 'litros', ...(vc ? ['preco_litro'] : []), 'origem', 'documento', 'responsavel', 'observacao'];
+    const a = G.get().filter(l => l.litros); const cols = ['hora', 'equipamento_id', 'horimetro', 'odometro', 'combustivel', 'litros', 'origem', 'documento', 'responsavel', 'observacao'];
     for (const l of a) { if (!l.equipamento_id) throw new Error('Escolha o equipamento em todas as linhas com litros.'); if (l.hora && !/^\d{1,2}:\d{2}$/.test(l.hora)) throw new Error(`Hora inválida: ${l.hora} (use hh:mm).`); const p = ant[l.equipamento_id]; if (p && l.horimetro != null && l.horimetro < p.horimetro) throw new Error(`${eqMap[l.equipamento_id].prefixo}: horímetro ${nf(l.horimetro, 1)} menor que o do abastecimento anterior (${nf(p.horimetro, 1)}).`); }
     const manter = new Set(a.filter(l => l.id).map(l => l.id));
     for (const x of db) if (!manter.has(x.id)) await q(sb.from('abastecimentos').delete().eq('id', x.id));
-    for (const l of a) { const v = Object.fromEntries(cols.map(k => [k, l[k] === '' || l[k] === undefined ? null : l[k]])); v.combustivel = v.combustivel || 'diesel_s10'; v.data = DIA_ABAST; v.obra_id = S.obra.id; if (l.id) await q(sb.from('abastecimentos').update(v).eq('id', l.id)); else await q(sb.from('abastecimentos').insert(v)); }
+    for (const l of a) { const v = Object.fromEntries(cols.map(k => [k, l[k] === '' || l[k] === undefined ? null : l[k]])); v.combustivel = v.combustivel || 'diesel_s10'; v.preco_litro = precoLinha(l) || null; v.data = DIA_ABAST; v.obra_id = S.obra.id; if (l.id) await q(sb.from('abastecimentos').update(v).eq('id', l.id)); else await q(sb.from('abastecimentos').insert(v)); }
     if (pode('equip')) for (const l of a) { const e = eqMap[l.equipamento_id]; if (e && l.horimetro != null && (e.horimetro_atual == null || l.horimetro > e.horimetro_atual)) await sb.from('equipamentos').update({ horimetro_atual: l.horimetro }).eq('id', e.id); }
     refLimpar('equip'); toast(`Ficha de ${dt(DIA_ABAST)} salva (${a.length} abastecimentos)`, 'ok'); await carregar();
   } catch (e) { erro(e); } };
-  const tab = () => G.get().filter(l => l.litros).map(l => { const e = eqMap[l.equipamento_id] || {}; return [l.hora || '', e.prefixo || '', e.descricao || '', num(l.horimetro), num(l.odometro), L_COMB[l.combustivel || 'diesel_s10'], num(l.litros), ...(vc ? [num(l.preco_litro), (Number(l.litros) || 0) * (Number(l.preco_litro) || 0)] : []), l.origem || '', l.documento || '', l.responsavel || '']; });
+  const tab = () => G.get().filter(l => l.litros).map(l => { const e = eqMap[l.equipamento_id] || {}; return [l.hora || '', e.prefixo || '', e.descricao || '', num(l.horimetro), num(l.odometro), L_COMB[l.combustivel || 'diesel_s10'], num(l.litros), ...(vc ? [precoLinha(l), (Number(l.litros) || 0) * (precoLinha(l) || 0)] : []), l.origem || '', l.documento || '', l.responsavel || '']; });
   const head = ['Hora', 'Prefixo', 'Equipamento', 'Horímetro', 'Odômetro', 'Combustível', 'Litros', ...(vc ? ['R$/litro', 'Valor (R$)'] : []), 'Origem', 'Cupom/req.', 'Responsável'];
   $('#adX').onclick = () => xlsxExport(`ABASTECIMENTO_${DIA_ABAST}`, 'Ficha de abastecimento diário', head, tab(), { sub: [`Data: ${dt(DIA_ABAST)}`], total: ['Total', '', '', null, null, '', soma(tab(), r => r[6]), ...(vc ? [null, soma(tab(), r => r[8])] : []), '', '', ''] });
   $('#adPdf').onclick = () => { const P = pdfNovo(`Ficha de abastecimento diário – ${dt(DIA_ABAST)}`, true); const t = tab();
