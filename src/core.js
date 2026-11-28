@@ -388,7 +388,7 @@ function barra(v, prev) {
 const cor = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 function grafico(canvas, cfg) {
   if (!canvas) return null;
-  if (window.Chart) { Chart.defaults.color = cor('--sec'); Chart.defaults.borderColor = cor('--lin2'); Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; }
+  if (window.Chart) { Chart.defaults.color = cor('--sec'); Chart.defaults.borderColor = cor('--lin2'); Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; Chart.defaults.locale = 'pt-BR'; }
   if (!window.Chart) { const p = canvas.parentNode; if (p) p.style.height = 'auto'; if (p) p.innerHTML = '<p class="muted">Gráfico indisponível: a biblioteca de gráficos não carregou (verifique a conexão e recarregue).</p>'; return null; }
   const ch = new Chart(canvas, cfg); S.charts.push(ch); return ch;
 }

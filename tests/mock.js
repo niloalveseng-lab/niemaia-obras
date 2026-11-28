@@ -20,7 +20,7 @@ const DB = {
   custos: [{ id: 'k1', obra_id: 'o1', data: '2026-11-10', categoria: 'material', valor: 1000, orcamento_item_id: 'i2', descricao: 'x' }],
   materiais: [{ id: 'm1', obra_id: 'o1', nome: 'CAP', unidade: 't', estoque_minimo: 10 }], suprimentos_movimentos: [],
   medicoes: [{ id: 'md1', obra_id: 'o1', numero: 1, periodo_inicio: '2026-11-01', periodo_fim: '2026-11-30', status: 'rascunho' }],
-  medicao_itens: [], medicao_documentos: [{ id: 'd1', medicao_id: 'md1', obra_id: 'o1', ordem: 1, documento: 'Relatório resumo', entregue: false }],
+  medicao_itens: [], diesel_precos: [], medicao_documentos: [{ id: 'd1', medicao_id: 'md1', obra_id: 'o1', ordem: 1, documento: 'Relatório resumo', entregue: false }],
   documentos_obra: [{ id: 'do1', obra_id: 'o1', ordem: 1, documento: 'ART', status: 'pendente' }],
   contatos: [{ id: 'ct1', obra_id: null, area: 'frota', nome: 'Josué', cargo: 'Encarregado de equipamentos', telefone: '83 99999-0000' }], certidoes: [{ id: 'ce1', tipo: 'INSS', validade: '2026-11-25' }], aditivos: [], auditoria: [{ id: 1, obra_id: 'o1', tabela: 'rdo', acao: 'INSERT', em: '2026-11-20T10:00:00Z', usuario: 'u1' }]
 };
@@ -29,6 +29,7 @@ const view = t => {
   if (t === 'vw_eap_avanco') return DB.eap_atividades.map(a => ({ ...a, percentual: a.percentual_executado || 0, percentual_auto: a.orcamento_item_id ? 10 : null }));
   if (t === 'vw_custo_real') return [...DB.custos.map(c => ({ ...c, origem: 'lancamento' })), ...DB.abastecimentos.map(a => ({ obra_id: a.obra_id, data: a.data, categoria: 'combustivel', origem: 'abastecimento', valor: a.valor || 0 }))];
   if (t === 'vw_obra_resumo') return OB.map(o => ({ obra_id: o.id, codigo: o.codigo, contrato_atualizado: o.valor_contrato || 0, valor_itens: o.id === 'o1' ? 17951372.14 : null, fisico_pct: o.id === 'o1' ? 1.5 : null, fisico_eap: 5, previsto_eap: o.id === 'o1' ? 12 : null, medido_aprovado: 0, financeiro_pct: 0, saldo_contrato: o.valor_contrato || 0, prazo_atualizado: o.prazo_dias || null, dias_decorridos: o.data_inicio ? 57 : null, prazo_pct: o.data_inicio ? 15.6 : null, termino_previsto: o.data_inicio ? '2027-10-01' : null, custo_real: 1000, custo_lancado: 1000, custo_equip: 0, custo_diesel: 0, valor_executado: 0 }));
+  if (t === 'vw_diesel') return DB.abastecimentos.map(a => { const e = DB.equipamentos.find(q => q.id === a.equipamento_id) || {}; const pr = (DB.diesel_precos || []).filter(p => p.obra_id === a.obra_id && p.vigencia <= a.data).sort((x, y) => x.vigencia < y.vigencia ? 1 : -1)[0]; return { obra_id: a.obra_id, data: a.data, equipamento_id: a.equipamento_id, prefixo: e.prefixo, descricao: e.descricao, litros: a.litros, valor: a.valor || (pr ? a.litros * pr.preco_litro : null), horas: null }; });
   if (t === 'vw_estoque') return DB.materiais.map(m => ({ ...m, saldo: 2, em_pedido: 0 }));
   return DB[t];
 };

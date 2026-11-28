@@ -19,7 +19,7 @@ function realEap(eap, itensMap) {
 }
 async function dadosPainel() {
   const id = S.obra.id;
-  const [itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev, R] = await Promise.all([
+  const [itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev, R, diesel, dpreco] = await Promise.all([
     q(sb.from('vw_itens_saldo').select('*').eq('obra_id', id).order('ordem')),
     q(sb.from('vw_eap_avanco').select('*').eq('obra_id', id).order('ordem')).then(a => a.map(x => ({ ...x, percentual_executado: x.percentual }))),
     q(sb.from('rdo').select('id,data,status,condicao').eq('obra_id', id).order('data')),
@@ -30,13 +30,15 @@ async function dadosPainel() {
     q(sb.from('vw_estoque').select('*').eq('obra_id', id)),
     q(sb.from('medicoes').select('numero,status,periodo_fim,data_envio').eq('obra_id', id)),
     q(sb.from('documentos_obra').select('documento,status').eq('obra_id', id)),
-    pode('custos') ? q(sb.from('vw_custo_real').select('valor,orcamento_item_id,origem').eq('obra_id', id)) : [],
+    pode('custos') ? q(sb.from('vw_custo_real').select('data,categoria,valor,orcamento_item_id,origem').eq('obra_id', id)) : [],
     q(sb.from('certidoes').select('tipo,validade')),
     q(sb.from('funcionarios').select('nome,aso_validade,epi_entregue,ativo').eq('obra_id', id)),
     q(sb.from('histograma_previsto').select('*').eq('obra_id', id)),
-    q(sb.from('vw_obra_resumo').select('*').eq('obra_id', id).maybeSingle())
+    q(sb.from('vw_obra_resumo').select('*').eq('obra_id', id).maybeSingle()),
+    q(sb.from('vw_diesel').select('*').eq('obra_id', id).order('data')).catch(() => []),
+    q(sb.from('diesel_precos').select('*').eq('obra_id', id).order('vigencia', { ascending: false })).catch(() => [])
   ]);
-  return { itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev, R: R || {} };
+  return { itens, eap, rdos, efet, serv, cbuq, eqs, est, meds, docs, custos, cert, func, hprev, R: R || {}, diesel: diesel || [], dpreco: dpreco || [] };
 }
 function indicadores(D) {
   const o = S.obra, it = D.itens;
@@ -90,24 +92,149 @@ function alertas(D, K) {
 }
 async function pgPainel(el) {
   const D = await dadosPainel(), K = indicadores(D), o = S.obra;
-  const al = alertas(D, K);
+  const al = alertas(D, K), CM = camadasVia(D.itens);
   const sub = (v, x) => v === null || v === undefined ? '–' : x;
+  const lit = soma(D.diesel, x => x.litros), dval = soma(D.diesel, x => x.valor);
   el.innerHTML = `<p class="muted" style="margin:-10px 0 14px">${h(o.contratante || 'Contratante a preencher')}${K.termino ? ' · término previsto ' + dt(K.termino) : ''}</p>
   <div class="kpis hero">
    <div class="kpi"><span>% físico</span><b>${pct(K.fisItens)}</b>${barra(K.fisItens, K.prevHoje)}<small>${!D.itens.length ? 'sem orçamento carregado' : K.prevHoje !== null ? 'previsto hoje (cronograma): ' + pct(K.prevHoje) : 'cronograma sem datas previstas'}</small></div>
    <div class="kpi"><span>% financeiro</span><b>${pct(K.finPct)}</b>${barra(K.finPct)}<small>medido aprovado ${brl(K.medAprov)}</small></div>
    <div class="kpi"><span>Prazo</span><b>${K.prazoDias ? `${K.decorridos} de ${K.prazoDias} dias` : 'a preencher'}</b>${K.prazoDias ? barra(K.prazoPct) : ''}<small>${K.prazoDias ? pct(K.prazoPct) + ' do prazo' + (K.termino ? ' · fim ' + dt(K.termino) : '') : 'informe data de início/OS e prazo em Obras'}</small></div>
    <div class="kpi"><span>Saldo do contrato</span><b>${sub(K.saldo, brl(K.saldo))}</b><small>contrato ${K.valorContr ? brl(K.valorContr) : '–'}${K.aditivo ? ' (aditivos ' + brl(K.aditivo) + ')' : ''}</small></div>
-  </div><div class="kpis">
-   ${K.cbuqContr ? `<div class="kpi"><span>CBUQ aplicado (área × 0,05 × 2,40)</span><b>${nf(K.cbuqT, 1)} t</b><small>de ${nf(K.cbuqContr, 1)} t (${pct(100 * K.cbuqT / K.cbuqContr)}) · balança ${nf(K.balT, 1)} t</small></div>` : ''}
-   ${pode('custos') ? `<div class="kpi"><span>Custo real</span><b>${brl(K.custo)}</b><small>lançado ${brl(K.custoLanc)} · máquinas ${brl(K.custoEq)} · diesel ${brl(K.custoDiesel)}${K.temPreco && K.execValor ? ' · margem ' + pct(100 * (K.execValor - K.custo) / K.execValor) : ''}</small></div>` : ''}
-   <div class="kpi"><span>Efetivo no último RDO</span><b>${K.ultDia ? K.porDia[K.ultDia] : '–'}</b><small>${K.ultDia ? dt(K.ultDia) : 'sem RDO'}</small></div>
   </div>
-  <div class="g2"><div class="card"><h3 style="margin-top:0">Curva S – planejado × realizado</h3><div style="position:relative;height:280px"><canvas id="cS"></canvas></div><p class="muted" id="cSm"></p></div>
-  <div class="card alertas"><h3 style="margin-top:0">Alertas (${al.length})</h3>${al.length ? al.map(([c, t]) => `<div class="b-${c}">${h(t)}</div>`).join('') : '<p class="muted">Sem alertas.</p>'}</div></div>
-  <div class="card"><h3 style="margin-top:0">Histograma de efetivo – real × previsto</h3><div style="position:relative;height:240px"><canvas id="cH"></canvas></div></div>
-  <div class="card"><h3 style="margin-top:0">Itens do contrato</h3><div class="tw"><table class="grid"><thead><tr><th>Descrição</th><th>Un</th><th class="n">Contratado</th><th class="n">Executado</th><th class="n">%</th><th class="n">Medido</th><th class="n">Saldo</th></tr></thead><tbody>${D.itens.map(i => `<tr><td>${h(i.descricao)}</td><td>${h(i.unidade)}</td><td class="n">${nf(i.qtd_contratada)}</td><td class="n">${nf(i.qtd_executada)}</td><td class="n">${pct(i.perc_executado)}</td><td class="n">${nf(i.qtd_medida_total)}</td><td class="n">${nf(i.qtd_saldo)}</td></tr>`).join('') || '<tr><td colspan="7" class="vazio">Orçamento sem itens. Importe a planilha vencedora em Orçamento.</td></tr>'}</tbody></table></div></div>`;
+  <div class="g2 painel-topo">
+   <div class="card via-card"><div class="card-h"><h3>Seção da via – avanço por camada</h3><a class="lk" href="#orcamento">Orçamento →</a></div>
+    ${CM.length ? `<div class="via3d" aria-hidden="true"><div class="via-cena">${CM.map((c, i) => `<div class="camada c-${c.k}" style="--i:${i};--p:${Math.min(100, c.p || 0)}%"><i></i></div>`).join('')}</div></div>
+    <ul class="via-leg">${CM.slice().reverse().map(c => `<li><span class="sw c-${c.k}"></span><b>${h(c.t)}</b><em>${pct(c.p)}</em><small>${c.n} ${c.n === 1 ? 'item' : 'itens'}${c.v ? ' · ' + brl(c.v) : ''}</small></li>`).join('')}</ul>` : '<p class="muted">Carregue o orçamento da obra para ver o avanço por camada.</p>'}
+   </div>
+   <div class="card alertas"><div class="card-h"><h3>Alertas (${al.length})</h3><a class="lk" href="#pendinfo">Pendências →</a></div>${al.length ? al.map(([c, t]) => `<div class="b-${c}">${h(t)}</div>`).join('') : '<p class="muted">Sem alertas.</p>'}</div>
+  </div>
+  <div class="kpis mini">
+   <div class="kpi"><span>Efetivo no último RDO</span><b>${K.ultDia ? K.porDia[K.ultDia] : '–'}</b><small>${K.ultDia ? dt(K.ultDia) : 'sem RDO'} · ${D.rdos.length} RDO(s)</small></div>
+   <div class="kpi"><span>Diesel abastecido</span><b>${nf(lit, 0)} l</b><small>${dval ? brl(dval) : 'informe o preço do diesel'}</small></div>
+   ${K.cbuqContr ? `<div class="kpi"><span>CBUQ aplicado</span><b>${nf(K.cbuqT, 1)} t</b><small>de ${nf(K.cbuqContr, 1)} t (${pct(100 * K.cbuqT / K.cbuqContr)}) · balança ${nf(K.balT, 1)} t</small></div>` : ''}
+   ${pode('custos') ? `<div class="kpi"><span>Custo real</span><b>${brl(K.custo)}</b><small>${K.temPreco && K.execValor ? 'margem ' + pct(100 * (K.execValor - K.custo) / K.execValor) + ' sobre o executado' : 'lançado + máquinas + diesel'}</small></div>` : ''}
+  </div>
+  <div class="painel-abas"></div>
+  <details class="card"><summary><h3 style="display:inline">Itens do contrato (${D.itens.length})</h3></summary><div class="tw"><table class="grid"><thead><tr><th>Descrição</th><th>Un</th><th class="n">Contratado</th><th class="n">Executado</th><th class="n">%</th><th class="n">Medido</th><th class="n">Saldo</th></tr></thead><tbody>${D.itens.map(i => `<tr><td>${h(i.descricao)}</td><td>${h(i.unidade)}</td><td class="n">${nf(i.qtd_contratada)}</td><td class="n">${nf(i.qtd_executada)}</td><td class="n">${pct(i.perc_executado)}</td><td class="n">${nf(i.qtd_medida_total)}</td><td class="n">${nf(i.qtd_saldo)}</td></tr>`).join('') || '<tr><td colspan="7" class="vazio">Orçamento sem itens. Importe a planilha vencedora em Orçamento.</td></tr>'}</tbody></table></div></details>`;
+  viaTilt($('.via3d', el));
+  const lista = [
+    { t: 'Execução', f: c => abaExecucao(c, D, K) },
+    ...(pode('custos') ? [{ t: 'Custos', f: c => abaCustos(c, D, K) }] : []),
+    { t: 'Diesel', f: c => abaDiesel(c, D) },
+    { t: 'Planejamento', f: c => abaPlanejamento(c, D) }
+  ];
+  abas($('.painel-abas', el), lista);
+}
+/* camadas da via: agrupa os itens do orçamento pelo tipo de serviço */
+const CAMADAS = [   /* [chave, nome, regra]: ordem = de baixo para cima na seção */
+  ['terra', 'Terraplenagem', /ATERRO|CORTE|ESCAVA|COMPACTA|REGULARIZA|DESMAT|SOLO MOLE|JAZIDA|TERRAPLEN|ESPALHAMENTO/i],
+  ['subbase', 'Sub-base', /SUB-?BASE/i],
+  ['base', 'Base', /\bBASE\b|RECICLAGEM|REESTABILIZA/i],
+  ['lig', 'Imprimação e pintura', /IMPRIMA|PINTURA DE LIGA/i],
+  ['cbuq', 'Revestimento', /CBUQ|BETUMINOSO|PARALELEP[IÍ]PEDO/i],
+  ['dren', 'Drenagem', /TUBO|BOCA DE|BUEIRO|DRENO|\bPV\b|PO[CÇ]O DE VISITA|SARJET|DESCIDA D|ENTRADA D|SA[IÍ]DA D/i],
+  ['mfio', 'Meio-fio e calçada', /MEIO-?FIO|CAL[CÇ]ADA|RAMPA/i],
+  ['sinal', 'Sinalização', /SINALIZA|TACHA/i]
+];
+const ORDEM_TESTE = ['subbase', 'lig', 'dren', 'mfio', 'sinal', 'cbuq', 'base', 'terra'];   /* regra mais específica primeiro */
+function camadasVia(itens) {
+  const g = {};
+  itens.filter(i => Number(i.qtd_contratada) > 0).forEach(i => {
+    const d = i.descricao || '';
+    if (/TRANSPORTE|EMULS|CAP 50|ASFALTO DILU|INDICATIVA|RETIRADA DE PARALELEP|DEMOLI/i.test(d)) return;   /* insumos, transportes e serviços que não são camada */
+    const k = ORDEM_TESTE.find(k => CAMADAS.find(c => c[0] === k)[2].test(d)); if (!k) return;
+    const x = g[k] = g[k] || { k, t: CAMADAS.find(c => c[0] === k)[1], v: 0, e: 0, n: 0, ps: 0 };
+    const v = Number(i.valor_contratado) || 0, fr = Math.min(1, (Number(i.qtd_executada) || 0) / i.qtd_contratada);
+    x.v += v; x.e += v * fr; x.n++; x.ps += fr;
+  });
+  return CAMADAS.map(([k]) => g[k]).filter(Boolean).map(x => ({ ...x, p: 100 * (x.v > 0 ? x.e / x.v : x.ps / x.n) }));
+}
+function viaTilt(box) {
+  if (!box || matchMedia('(prefers-reduced-motion: reduce)').matches || matchMedia('(hover: none)').matches) return;
+  const cena = $('.via-cena', box);
+  box.onpointermove = e => { const r = box.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; cena.style.setProperty('--rx', (56 - y * 10) + 'deg'); cena.style.setProperty('--rz', (-36 + x * 14) + 'deg'); };
+  box.onpointerleave = () => { cena.style.removeProperty('--rx'); cena.style.removeProperty('--rz'); };
+}
+const cardG = (id, titulo, link, alt = 260, nota = '') => `<div class="card"><div class="card-h"><h3>${titulo}</h3>${link ? `<a class="lk" href="#${link[0]}">${link[1]} →</a>` : ''}</div><div class="gbox" style="height:${alt}px"><canvas id="${id}"></canvas></div>${nota ? `<p class="muted nota">${nota}</p>` : ''}</div>`;
+const vazioG = (id, t) => { const c = $('#' + id); if (c) c.parentNode.outerHTML = `<p class="muted gvazio">${t}</p>`; };
+const brlK = v => 'R$ ' + (Math.abs(v) >= 1e6 ? nf(v / 1e6, 1) + ' mi' : Math.abs(v) >= 1e3 ? nf(v / 1e3, 0) + ' mil' : nf(v, 0));
+function abaExecucao(c, D, K) {
+  c.innerHTML = `<div class="g2">${cardG('cS', 'Curva S – planejado × realizado', ['planejamento', 'Planejamento'], 280, '<span id="cSm"></span>')}${cardG('cP', 'Produção diária', ['producaomes', 'Produção mensal'], 280)}</div>${cardG('cH', 'Histograma de efetivo – real × previsto', ['maodeobra', 'Mão de obra'], 240)}`;
   curvaS(D, K); histograma(D, 'cH');
+  const porDia = {}, porItem = {};
+  D.serv.forEach(s => { const d = s.rdo && s.rdo.data, it = K.itensMap[s.orcamento_item_id]; if (!d || !it) return; const v = K.temPreco ? (Number(s.quantidade) || 0) * (Number(it.preco_unitario) || 0) : 1; porDia[d] = (porDia[d] || 0) + v; });
+  const ds = Object.keys(porDia).sort();
+  if (!ds.length) return vazioG('cP', 'Sem produção na memória de cálculo. Ela é preenchida pelos RDOs aprovados e pelas fichas.');
+  const lab = []; for (let d = ds[0]; d <= ds[ds.length - 1]; d = addDias(d, 1)) lab.push(d);
+  grafico($('#cP'), { type: 'bar', data: { labels: lab.map(d => dt(d).slice(0, 5)), datasets: [{ label: K.temPreco ? 'Executado no dia (R$)' : 'Lançamentos no dia', data: lab.map(d => porDia[d] ?? 0), backgroundColor: cor('--lar'), borderRadius: 4, maxBarThickness: 22 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => K.temPreco ? brl(x.parsed.y) : nf(x.parsed.y) + ' lançamento(s)' } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => K.temPreco ? brlK(v) : v } }, x: { grid: { display: false } } }, onClick: () => location.hash = '#producaomes' } });
+}
+function abaCustos(c, D, K) {
+  c.innerHTML = `<div class="g2">${cardG('cC1', 'Custo real × valor executado (acumulado)', ['custos', 'Custos'], 280)}${cardG('cC2', 'Custo por categoria', ['custos', 'Custos'], 280)}</div>`;
+  if (!D.custos.length) { vazioG('cC1', 'Nenhum custo registrado. Entram aqui os lançamentos de Custos, as horas de máquina do RDO × custo horário e o diesel dos abastecimentos (com o preço vigente).'); vazioG('cC2', 'Sem custos por categoria.'); return; }
+  const exe = {}; D.serv.forEach(s => { const d = s.rdo && s.rdo.data, it = K.itensMap[s.orcamento_item_id]; if (d && it) exe[d] = (exe[d] || 0) + (Number(s.quantidade) || 0) * (Number(it.preco_unitario) || 0); });
+  const cus = {}; D.custos.forEach(x => { if (x.data) cus[x.data] = (cus[x.data] || 0) + Number(x.valor || 0); });
+  const ds = [...new Set([...Object.keys(exe), ...Object.keys(cus)])].sort(); let a1 = 0, a2 = 0;
+  const s1 = ds.map(d => (a1 += cus[d] || 0)), s2 = ds.map(d => (a2 += exe[d] || 0));
+  grafico($('#cC1'), { type: 'line', data: { labels: ds.map(d => dt(d).slice(0, 5)), datasets: [
+    { label: 'Custo real', data: s1, borderColor: cor('--er'), backgroundColor: cor('--er'), pointRadius: 0, tension: .25, borderWidth: 2 },
+    ...(K.temPreco ? [{ label: 'Valor executado (preço contratado)', data: s2, borderColor: cor('--lar'), backgroundColor: cor('--lar'), pointRadius: 0, tension: .25, borderWidth: 2 }] : [])] },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl(x.parsed.y)}` } } }, scales: { y: { beginAtZero: true, ticks: { callback: brlK } }, x: { grid: { display: false } } } } });
+  const cat = {}; D.custos.forEach(x => { const k = L.categoria[x.categoria] || x.categoria || 'Outros'; cat[k] = (cat[k] || 0) + Number(x.valor || 0); });
+  const cs = Object.entries(cat).sort((a, b) => b[1] - a[1]);
+  grafico($('#cC2'), { type: 'bar', data: { labels: cs.map(x => x[0]), datasets: [{ label: 'Custo', data: cs.map(x => x[1]), backgroundColor: cor('--txt'), borderRadius: 4, maxBarThickness: 18 }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => brl(x.parsed.x) } } }, scales: { x: { beginAtZero: true, ticks: { callback: brlK } }, y: { grid: { display: false } } }, onClick: () => location.hash = '#custos' } });
+}
+async function abaDiesel(c, D) {
+  const lit = soma(D.diesel, x => x.litros), val = soma(D.diesel, x => x.valor), dias = new Set(D.diesel.map(x => x.data)).size;
+  const vig = D.dpreco[0], pe = pode('custos') || ['admin', 'gestor', 'auxiliar'].includes(S.perfil);
+  const eq = {}; D.diesel.forEach(x => { const k = x.prefixo || 'Sem prefixo'; const e = eq[k] = eq[k] || { l: 0, h: 0, d: x.descricao }; e.l += Number(x.litros) || 0; e.h += Number(x.horas) || 0; });
+  const eqs = Object.entries(eq).sort((a, b) => b[1].l - a[1].l);
+  c.innerHTML = `<div class="kpis mini">
+    <div class="kpi"><span>Litros abastecidos</span><b>${nf(lit, 0)} l</b><small>${dias} dia(s) com abastecimento</small></div>
+    <div class="kpi"><span>Média por dia</span><b>${dias ? nf(lit / dias, 0) : '–'} l</b><small>dias com abastecimento</small></div>
+    <div class="kpi"><span>Custo do diesel</span><b>${val ? brl(val) : '–'}</b><small>${val ? (vig ? 'preço vigente ' + brl(vig.preco_litro) + '/l' : 'pelas notas') : 'sem preço informado'}</small></div>
+    <div class="kpi"><span>Preço vigente</span><b>${vig ? brl(vig.preco_litro) + '/l' : 'a preencher'}</b><small>${vig ? 'desde ' + dt(vig.vigencia) : ''}${pe ? ` <button class="lk" id="bPreco">${vig ? 'Atualizar' : 'Informar'} preço</button>` : ''}</small></div>
+  </div>
+  <div class="g2">${cardG('cD1', 'Litros abastecidos por dia', ['equipamentos', 'Abastecimentos'], 260)}${cardG('cD2', 'Litros por equipamento', ['equipamentos', 'Equipamentos'], Math.max(220, 26 * Math.min(eqs.length, 14) + 40))}</div>
+  ${val ? cardG('cD3', 'Custo do diesel por dia', ['custos', 'Custos'], 220) : ''}
+  <div class="card"><div class="card-h"><h3>Consumo por equipamento</h3></div><div class="tw"><table class="grid"><thead><tr><th>Prefixo</th><th>Equipamento</th><th class="n">Litros</th><th class="n">Horas (RDO)</th><th class="n">l/h</th></tr></thead><tbody>${eqs.map(([k, e]) => `<tr><td><b>${h(k)}</b></td><td>${h(e.d || '')}</td><td class="n">${nf(e.l, 0)}</td><td class="n">${e.h ? nf(e.h, 1) : '–'}</td><td class="n">${e.h ? nf(e.l / e.h, 1) : '–'}</td></tr>`).join('') || '<tr><td colspan="5" class="vazio">Sem abastecimentos.</td></tr>'}</tbody></table></div><p class="muted nota">l/h usa as horas do RDO do mesmo dia (horímetro ou horas produtivas + improdutivas). Sem horas no RDO, fica em branco.</p></div>
+  ${D.dpreco.length ? `<div class="card"><div class="card-h"><h3>Histórico de preço do diesel</h3></div><table class="grid"><thead><tr><th>Vigência</th><th class="n">R$/l</th><th>Fonte</th></tr></thead><tbody>${D.dpreco.map(p => `<tr><td>${dt(p.vigencia)}</td><td class="n">${nf(p.preco_litro, 2)}</td><td>${h(p.fonte || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+  const b = $('#bPreco', c); if (b) b.onclick = () => precoDiesel(() => rotear());
+  const porDia = {}, vDia = {}; D.diesel.forEach(x => { porDia[x.data] = (porDia[x.data] || 0) + Number(x.litros || 0); vDia[x.data] = (vDia[x.data] || 0) + Number(x.valor || 0); });
+  const ds = Object.keys(porDia).sort();
+  if (!ds.length) { vazioG('cD1', 'Sem abastecimentos lançados.'); vazioG('cD2', 'Sem abastecimentos lançados.'); return; }
+  const lab = []; for (let d = ds[0]; d <= ds[ds.length - 1]; d = addDias(d, 1)) lab.push(d);
+  const opBar = (fmt, ir) => ({ maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => fmt(x.parsed.y) } } }, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }, onClick: () => location.hash = ir });
+  grafico($('#cD1'), { type: 'bar', data: { labels: lab.map(d => dt(d).slice(0, 5)), datasets: [{ label: 'Litros', data: lab.map(d => porDia[d] ?? 0), backgroundColor: cor('--lar'), borderRadius: 4, maxBarThickness: 22 }] }, options: opBar(v => nf(v, 0) + ' l', '#equipamentos') });
+  const top = eqs.slice(0, 14);
+  grafico($('#cD2'), { type: 'bar', data: { labels: top.map(x => x[0]), datasets: [{ label: 'Litros', data: top.map(x => x[1].l), backgroundColor: cor('--txt'), borderRadius: 4, maxBarThickness: 16 }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => nf(x.parsed.x, 0) + ' l' } } }, scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, onClick: () => location.hash = '#equipamentos' } });
+  if (val) { const o = opBar(brl, '#custos'); o.scales.y.ticks = { callback: brlK }; grafico($('#cD3'), { type: 'bar', data: { labels: lab.map(d => dt(d).slice(0, 5)), datasets: [{ label: 'R$', data: lab.map(d => vDia[d] ?? 0), backgroundColor: cor('--txt'), borderRadius: 4, maxBarThickness: 22 }] }, options: o }); }
+}
+function precoDiesel(depois) {
+  modal('Preço do diesel', `<div class="frm"><label>Vigência a partir de<input type="date" id="pdV" value="${hoje()}"></label><label>Preço (R$/l)<input type="text" inputmode="decimal" id="pdP" placeholder="6,29"></label><label class="wf">Fonte<input type="text" id="pdF" placeholder="Nota fiscal / posto / cotação"></label></div><p class="muted">Abastecimentos sem valor na nota passam a usar o preço vigente na data. Abastecimentos com valor ou preço próprio não mudam.</p>`,
+    [{ t: 'Salvar', c: 'pri', f: async () => { const p = num($('#pdP').value), v = $('#pdV').value; if (!p || p <= 0 || !v) { toast('Informe a data e o preço', 'er'); return false; }
+      await q(sb.from('diesel_precos').upsert({ obra_id: S.obra.id, vigencia: v, preco_litro: p, fonte: $('#pdF').value || null }, { onConflict: 'obra_id,vigencia' })); toast('Preço do diesel salvo', 'ok'); depois && depois(); } }]);
+}
+function abaPlanejamento(c, D) {
+  const at = D.eap.filter(a => a.status !== 'marco');
+  const fr = {}; at.forEach(a => { const k = a.frente || 'Geral'; const x = fr[k] = fr[k] || { p: 0, r: 0, w: 0 };
+    const w = Number(a.peso_valor) > 0 ? Number(a.peso_valor) : 1; x.w += w; x.r += w * (Number(a.percentual) || 0);
+    if (a.inicio_previsto && a.fim_previsto) x.p += w * 100 * Math.max(0, Math.min(1, (new Date(hoje()) - new Date(a.inicio_previsto)) / 864e5 / ((new Date(a.fim_previsto) - new Date(a.inicio_previsto)) / 864e5 + 1))); });
+  const fs = Object.entries(fr).map(([k, x]) => [k, x.p / x.w, x.r / x.w]).sort((a, b) => (b[1] - b[2]) - (a[1] - a[2])).slice(0, 12);
+  const atras = at.filter(a => a.fim_previsto && a.fim_previsto < hoje() && (Number(a.percentual) || 0) < 100).sort((a, b) => a.fim_previsto < b.fim_previsto ? -1 : 1);
+  const prox = at.filter(a => a.inicio_previsto && a.inicio_previsto >= hoje() && a.inicio_previsto <= addDias(hoje(), 15)).sort((a, b) => a.inicio_previsto < b.inicio_previsto ? -1 : 1);
+  const li = (a, d) => `<li><b>${h(a.codigo || '')}</b> ${h(a.nome)}<small>${d} · ${pct(a.percentual)}</small></li>`;
+  c.innerHTML = `${cardG('cE', 'Previsto × realizado por frente (EAP)', ['planejamento', 'Planejamento'], Math.max(220, 34 * fs.length + 50), 'Previsto até hoje: distribuição linear entre início e fim previstos. Realizado: memória de cálculo vinculada ao item da atividade.')}
+  <div class="g2"><div class="card"><div class="card-h"><h3>Atrasadas (${atras.length})</h3></div>${atras.length ? `<ul class="lista-at">${atras.slice(0, 10).map(a => li(a, 'fim previsto ' + dt(a.fim_previsto))).join('')}</ul>` : '<p class="muted">Nenhuma atividade com prazo vencido.</p>'}</div>
+  <div class="card"><div class="card-h"><h3>Próximos 15 dias (${prox.length})</h3></div>${prox.length ? `<ul class="lista-at">${prox.slice(0, 10).map(a => li(a, 'início ' + dt(a.inicio_previsto))).join('')}</ul>` : '<p class="muted">Nenhuma atividade prevista para começar.</p>'}</div></div>`;
+  if (!fs.length) return vazioG('cE', 'Cadastre a EAP em Planejamento.');
+  grafico($('#cE'), { type: 'bar', data: { labels: fs.map(x => x[0]), datasets: [
+    { label: 'Previsto até hoje', data: fs.map(x => x[1]), backgroundColor: cor('--lin-forte'), borderRadius: 4, maxBarThickness: 12 },
+    { label: 'Realizado', data: fs.map(x => x[2]), backgroundColor: cor('--lar'), borderRadius: 4, maxBarThickness: 12 }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${nf(x.parsed.x, 1)}%` } } }, scales: { x: { min: 0, max: 100, ticks: { callback: v => v + '%' } }, y: { grid: { display: false } } }, onClick: () => location.hash = '#planejamento' } });
 }
 function curvaS(D, K) {
   if (!$('#cS')) return;
