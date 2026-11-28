@@ -10,12 +10,14 @@ dado, ocorrências, registro fotográfico 2 por linha com TODAS as fotos na mesm
 
 Os dados completos vão num bloco interno do .docx (customXml, urn:niemaia:rdo:v1), que o
 sistema de gestão lê na importação (Diário de Obra → Importar RDO).
-Requer: python-docx e Pillow (pip install python-docx pillow --break-system-packages)
+Requer: python-docx, Pillow e pdfplumber (pip install python-docx pillow pdfplumber --break-system-packages)
+e LibreOffice (soffice) para medir a página: assinaturas no pé da última folha, nunca sozinhas
+(--sem-ajuste desliga). Tabelas com a mesma largura (18 cm) e linhas que não quebram entre páginas.
 """
 import json, sys, os, re, io, base64, zipfile, datetime, shutil
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER, WD_LINE_SPACING
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from PIL import Image, ImageOps
@@ -134,6 +136,59 @@ def embutir_dados(caminho_docx, dados):
         zo.writestr(f'customXml/itemProps{k}.xml', props)
         zo.writestr(f'customXml/_rels/item{k}.xml.rels', f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps" Target="itemProps{k}.xml"/></Relationships>')
     shutil.move(tmp, caminho_docx)
+
+AJUSTAR, FOLGA_PT = True, 30
+
+def _pdf(docx):
+    import subprocess, tempfile
+    tmp = tempfile.mkdtemp(); cmd = os.environ.get('SOFFICE', shutil.which('soffice') or shutil.which('libreoffice') or 'soffice')
+    subprocess.run([cmd, '--headless', '--convert-to', 'pdf', '--outdir', tmp, docx], capture_output=True, timeout=180)
+    pdf = os.path.join(tmp, os.path.splitext(os.path.basename(docx))[0] + '.pdf')
+    return pdf if os.path.exists(pdf) else None
+
+def _medir(pdf):
+    import pdfplumber
+    with pdfplumber.open(pdf) as P:
+        n = len(P.pages); pg = P.pages[-1]; ws = pg.extract_words()
+        tit = [w['top'] for w in ws if w['text'] == 'ASSINATURAS']
+        corpo = [w for w in ws if tit and w['top'] < tit[0] - 2]
+        rod = pg.height - Cm(1.5).pt
+        fim = max([w['bottom'] for w in ws if w['bottom'] < rod] + [l['bottom'] for l in pg.lines if l.get('bottom') and l['bottom'] < rod] or [0])
+        bloco = (fim - tit[0] + 8) if tit else 0
+        fim_ant = 0
+        if n > 1:
+            p2 = P.pages[-2]; fim_ant = max([w['bottom'] for w in p2.extract_words() if w['bottom'] < rod] or [0])
+        return n, bool(corpo), fim, pg.height, bloco, fim_ant
+
+def _reduzir_fotos(doc, pontos):
+    exts = [dp.getparent() for dp in doc.element.body.iter(qn('wp:docPr')) if (dp.get('descr') or '').startswith('foto-')]
+    if not exts: return False
+    linhas = (len(exts) + 1) // 2; alt = int(exts[0].find(qn('wp:extent')).get('cy')) / 12700.0
+    k = max(0.6, (alt * linhas - pontos) / (alt * linhas))
+    for inl in exts:
+        for e in list(inl.iter(qn('wp:extent'))) + list(inl.iter(qn('a:ext'))):
+            e.set('cx', str(int(int(e.get('cx')) * k))); e.set('cy', str(int(int(e.get('cy')) * k)))
+    return True
+
+def assinatura_no_pe(doc, esp, saida):
+    """Leva as assinaturas para o pé da última folha, sem deixá-las sozinhas (mede o PDF do LibreOffice)."""
+    try:
+        pdf = _pdf(saida)
+        if not pdf: avisos.append('LibreOffice indisponível: assinaturas não ajustadas ao pé da folha'); return
+        n, tem_corpo, fim, alt, bloco, fim_ant = _medir(pdf)
+        if not tem_corpo and n > 1:
+            falta = bloco - (alt - Cm(1.5).pt - fim_ant) + 40  # + espaço antes do título e folga Word × LibreOffice
+            if _reduzir_fotos(doc, falta):
+                doc.save(saida); n, tem_corpo, fim, alt, bloco, fim_ant = _medir(_pdf(saida))
+            if not tem_corpo: avisos.append('Assinaturas ficaram sozinhas na última folha')
+        livre = alt - Cm(1.5).pt - fim - FOLGA_PT
+        if livre <= 2: return
+        esp.paragraph_format.line_spacing = Pt(livre); doc.save(saida)
+        pdf2 = _pdf(saida)
+        if pdf2 and _medir(pdf2)[0] != n:
+            esp.paragraph_format.line_spacing = Pt(1); doc.save(saida); avisos.append('Assinaturas: ajuste desfeito (mudaria o nº de páginas)')
+    except Exception as e:
+        avisos.append(f'Assinaturas não ajustadas: {e}')
 
 def gerar(d, saida=None, logo=None):
     obra = d['obra'].upper().replace('Ç', 'C')
@@ -320,19 +375,21 @@ def gerar(d, saida=None, logo=None):
                 fotos_meta.append({'legenda': desc, **{k: ft.get(k) for k in ('servico', 'local', 'lado', 'data_hora', 'lat', 'lon')}})
         larguras(t, [LARG / 2, LARG / 2]); nao_quebra(t)
 
-    # assinaturas, sempre juntas
+    # assinaturas: espaçador (ajustado depois) + título + linhas, sempre juntos
     asn = d.get('assinaturas') or [{'nome': 'Nilo Alves da Costa Neto', 'cargo': 'Auxiliar de engenharia – NIEMAIA'}, {'nome': 'Eng. Yago Dias', 'cargo': 'Gestor do contrato – NIEMAIA'}, {'nome': AP, 'cargo': 'Fiscalização – Prefeitura de Sousa'}]
-    par(doc, 20, 0, kwn=True)
+    esp = par(doc, 0, 0, kwn=True); esp.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY; esp.paragraph_format.line_spacing = Pt(1); esp.add_run().font.size = Pt(1)
+    n += 1; titulo(doc, n, 'Assinaturas')
     t = doc.add_table(rows=1, cols=len(asn)); sem_bordas(t)
     for i, a_ in enumerate(asn):
         cel = t.rows[0].cells[i]; margem_cel(cel, 0.3)
-        p = cel.paragraphs[0]; p.paragraph_format.space_before = Pt(28); borda_inf(p, '26272B', 4)
+        p = cel.paragraphs[0]; p.paragraph_format.space_before = Pt(26); p.paragraph_format.keep_with_next = True; borda_inf(p, '26272B', 4)
         p = cel.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER; run(p, a_.get('nome') or AP, True, 8.5)
         p = cel.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER; run(p, a_.get('cargo') or '', False, 7.5, CINZA)
     larguras(t, [LARG / len(asn)] * len(asn)); nao_quebra(t)
 
     saida = saida or f"{obra}_RDO_{nro}_{data.isoformat()}.docx"
     doc.save(saida)
+    if AJUSTAR: assinatura_no_pe(doc, esp, saida)
     embutir_dados(saida, {'versao': 2, 'obra': obra, 'numero': nro, 'data': d['data'], 'horario_inicio': d.get('horario_inicio'), 'horario_fim': d.get('horario_fim'),
         'clima': clima, 'efetivo': ef,
         'equipamentos': [{k: e.get(k) for k in ('prefixo', 'descricao', 'horimetro_ini', 'horimetro_fim', 'horas_produtivas', 'horas_improdutivas', 'horas_paradas', 'motivo_parada', 'diesel_litros')} for e in eq_calc],
@@ -343,6 +400,7 @@ def gerar(d, saida=None, logo=None):
 if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     logo = sys.argv[sys.argv.index('--logo') + 1] if '--logo' in sys.argv else None
+    if '--sem-ajuste' in sys.argv: AJUSTAR = False
     if logo in args: args.remove(logo)
     d = json.load(open(args[0], encoding='utf-8'))
     lista = d if isinstance(d, list) else d.get('rdos', [d])
