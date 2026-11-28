@@ -26,6 +26,13 @@ async function lerDocxRdo(file) {
   const xml = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
   const relXml = zip.file('word/_rels/document.xml.rels') ? new DOMParser().parseFromString(await zip.file('word/_rels/document.xml.rels').async('string'), 'application/xml') : null;
   const rel = {}; if (relXml) [...relXml.getElementsByTagName('Relationship')].forEach(r => rel[r.getAttribute('Id')] = r.getAttribute('Target'));
+  /* RDO v2 (gerar_rdo.py 28/11/2026): dados completos num bloco interno customXml (urn:niemaia:rdo:v1); o layout não tem tabelas de dados */
+  for (const n of Object.keys(zip.files).filter(n => /^customXml\/item\d+\.xml$/.test(n))) {
+    const t = await zip.file(n).async('string');
+    if (!t.includes('urn:niemaia:rdo')) continue;
+    const b64 = t.replace(/^[\s\S]*?<rdo[^>]*>/, '').replace(/<\/rdo>[\s\S]*$/, '').trim();
+    return rdoDeDados(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)))), zip, xml, rel, file);
+  }
   const ehTopo = el => { let x = el.parentNode; while (x) { if (x.localName === 'tbl') return false; x = x.parentNode; } return true; };
   const txtP = pp => [...pp.getElementsByTagNameNS(W, '*')].map(n => n.localName === 't' ? n.textContent : (n.localName === 'tab' ? ' ' : (n.localName === 'br' ? ' | ' : ''))).join('');
   const txtC = tc => [...tc.getElementsByTagNameNS(W, 'p')].map(txtP).map(s => s.trim()).filter(Boolean).join(' | ');
@@ -80,6 +87,32 @@ async function lerDocxRdo(file) {
     const pt = leg.split(/\s+[–-]\s+/).map(s => s.trim()).filter(s => !/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(s));
     const ld = pt.length > 1 && /^(LE|LD|EIXO|AMBOS)$/i.test(pt[pt.length - 1]) ? pt.pop().toUpperCase() : null;
     r._fotos.push({ blob: await z.async('blob'), nome: alvo.split('/').pop(), legenda: leg || null, data_hora: dh, servico: pt[1] || null, local: pt.slice(2).join(' – ') || null, lado: ld, latitude: mc ? Number(mc[1].replace(',', '.')) : null, longitude: mc ? Number(mc[2].replace(',', '.')) : null }); }
+  return r;
+}
+/* monta o RDO a partir do bloco interno do Word v2; fotos pela ordem 'foto-N' (descr do desenho) */
+async function rdoDeDados(js, zip, xml, rel, file) {
+  const num = v => v === null || v === undefined || v === '' ? null : Number(v);
+  const r = { _fotos: [], _doc: file, _av: [], data: normData(js.data), numero: js.numero || null, horario_inicio: js.horario_inicio || null, horario_fim: js.horario_fim || null,
+    obra: js.obra || null, clima_manha: (js.clima && js.clima.manha && js.clima.manha.tempo) || null, clima_tarde: (js.clima && js.clima.tarde && js.clima.tarde.tempo) || null };
+  const cond = ['manha', 'tarde'].map(k => normCond((js.clima && js.clima[k] && js.clima[k].condicao) || 'praticável'));
+  r.condicao = cond.every(c => c === 'impraticavel') ? 'impraticavel' : cond.some(c => c !== 'praticavel') ? 'parcial' : 'praticavel';
+  r.efetivo = (js.efetivo || []).filter(e => e.funcao && num(e.quantidade) !== null).map(e => ({ funcao: e.funcao, quantidade: num(e.quantidade), vinculo: e.vinculo || 'proprio', horas: num(e.horas), observacao: e.observacao || null }));
+  r.equipamentos = (js.equipamentos || []).filter(e => e.prefixo || e.descricao).map(e => ({ _nome: e.descricao || e.prefixo, _qtd: 1, prefixo: e.prefixo || null, horimetro_ini: num(e.horimetro_ini), horimetro_fim: num(e.horimetro_fim),
+    horas_produtivas: num(e.horas_produtivas), horas_improdutivas: num(e.horas_improdutivas), horas_paradas: num(e.horas_paradas), motivo_parada: e.motivo_parada || null, diesel_litros: num(e.diesel_litros) }));
+  r.servicos = (js.servicos || []).filter(x => x.servico).map(x => ({ item: x.item || null, servico: x.servico, local: x.local || null, estaca_ini: x.estaca_ini || null, estaca_fim: x.estaca_fim || null, lado: x.lado || null,
+    comprimento: num(x.comprimento), largura: num(x.largura), espessura: num(x.espessura), quantidade: num(x.quantidade), unidade: x.unidade || null, retrabalho: !!x.retrabalho, observacao: x.observacao || null }));
+  r.ocorrencias = (js.ocorrencias || []).filter(Boolean).join('\n') || null;
+  r.observacoes_fiscal = (js.observacoes_fiscal || []).filter(Boolean).join('\n') || null;
+  r.atividades = r.servicos.map(s => `${s.servico}${s.local ? ' – ' + s.local : ''}${s.estaca_ini ? ' – est. ' + s.estaca_ini + ' a ' + (s.estaca_fim || '') : ''}${s.lado ? ' ' + s.lado : ''}${s.quantidade != null ? ': ' + nf(s.quantidade, s.quantidade % 1 ? 2 : 0) + ' ' + (s.unidade || '') : ''}`).join('\n') || null;
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  for (const dp of [...xml.getElementsByTagName('*')].filter(n => n.localName === 'docPr' && /^foto-\d+$/.test(n.getAttribute('descr') || ''))) {
+    const i = +dp.getAttribute('descr').split('-')[1] - 1, meta = (js.fotos || [])[i] || {};
+    const blip = [...dp.parentNode.getElementsByTagName('*')].find(n => n.localName === 'blip'); if (!blip) continue;
+    const alvo = rel[blip.getAttributeNS(R, 'embed')]; const z = alvo && zip.file('word/' + alvo.replace(/^\/?(word\/)?/, '')); if (!z) continue;
+    const m = String(meta.data_hora || '').match(/(\d{1,2}\/\d{1,2}\/\d{4})\s*(\d{1,2}:\d{2})?/);
+    r._fotos.push({ blob: await z.async('blob'), nome: alvo.split('/').pop(), legenda: meta.legenda || null, servico: meta.servico || null, local: meta.local || null, lado: meta.lado || null,
+      data_hora: m ? new Date(`${normData(m[1])}T${m[2] || '12:00'}:00-03:00`).toISOString() : null, latitude: num(meta.lat), longitude: num(meta.lon) });
+  }
   return r;
 }
 /* Excel modelo → mesma estrutura do JSON */
